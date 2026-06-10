@@ -63,7 +63,7 @@ export function cardArt(c: ScryfallCard): string | undefined {
 // Suggest commanders matching the user's choices.
 export async function suggestCommanders(opts: {
   colors: ManaColor[];
-  archetype: string;
+  archetypes: string[];
   budget?: number;
 }): Promise<ScryfallCard[]> {
   const parts = ["is:commander", "game:paper"];
@@ -82,8 +82,12 @@ export async function suggestCommanders(opts: {
     voltron: "equipment",
     reanimator: "graveyard",
   };
-  const kw = archKeyword[opts.archetype];
-  if (kw) parts.push(`o:${kw}`);
+  const kws = opts.archetypes
+    .map((a) => archKeyword[a])
+    .filter(Boolean);
+  if (kws.length) {
+    parts.push(`(${kws.map((kw) => `o:${kw}`).join(" or ")})`);
+  }
   if (opts.budget) parts.push(`usd<=${Math.max(1, Math.floor(opts.budget / 20))}`);
   const q = encodeURIComponent(parts.join(" "));
   const data = await scry<{ data: ScryfallCard[] }>(
