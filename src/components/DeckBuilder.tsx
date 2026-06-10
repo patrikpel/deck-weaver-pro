@@ -335,13 +335,18 @@ function NavRow({ onBack, next }: { onBack?: () => void; next?: React.ReactNode 
 }
 
 function DeckView({
-  deck, format, onRestart, onTweak,
+  deck, format, archetype, onRestart, onTweak,
 }: {
   deck: { commander: ScryfallCard | null; cards: ScryfallCard[] };
   format: Format;
+  archetype: string;
   onRestart: () => void;
   onTweak: () => void;
 }) {
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [shareCode, setShareCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   const total = deck.cards.length + (deck.commander ? 1 : 0);
   const price = deck.cards.reduce((s, c) => s + (parseFloat(c.prices?.usd ?? "0") || 0), 0)
     + (deck.commander ? parseFloat(deck.commander.prices?.usd ?? "0") || 0 : 0);
@@ -367,6 +372,15 @@ function DeckView({
     a.download = `${(deck.commander?.name ?? "deck").replace(/\s+/g, "_")}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  const shareUrl = shareCode && typeof window !== "undefined"
+    ? `${window.location.origin}/d/${shareCode}`
+    : "";
+
+  async function copyShare() {
+    if (!shareUrl) return;
+    try { await navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
   }
 
   return (
