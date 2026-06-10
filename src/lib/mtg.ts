@@ -63,7 +63,7 @@ export function cardArt(c: ScryfallCard): string | undefined {
 // Suggest commanders matching the user's choices.
 export async function suggestCommanders(opts: {
   colors: ManaColor[];
-  archetype: string;
+  archetypes: string[];
   budget?: number;
 }): Promise<ScryfallCard[]> {
   const parts = ["is:commander", "game:paper"];
@@ -82,8 +82,12 @@ export async function suggestCommanders(opts: {
     voltron: "equipment",
     reanimator: "graveyard",
   };
-  const kw = archKeyword[opts.archetype];
-  if (kw) parts.push(`o:${kw}`);
+  const kws = opts.archetypes
+    .map((a) => archKeyword[a])
+    .filter(Boolean);
+  if (kws.length) {
+    parts.push(`(${kws.map((kw) => `o:${kw}`).join(" or ")})`);
+  }
   if (opts.budget) parts.push(`usd<=${Math.max(1, Math.floor(opts.budget / 20))}`);
   const q = encodeURIComponent(parts.join(" "));
   const data = await scry<{ data: ScryfallCard[] }>(
@@ -95,7 +99,7 @@ export async function suggestCommanders(opts: {
 // Build a Commander (100-card) decklist using Scryfall searches per role.
 export async function buildCommanderDeck(opts: {
   commander: ScryfallCard;
-  archetype: string;
+  archetypes: string[];
   budget?: number;
   powerLevel: number; // 1-10
 }): Promise<{ commander: ScryfallCard; cards: ScryfallCard[] }> {
@@ -115,8 +119,12 @@ export async function buildCommanderDeck(opts: {
     voltron: ["equipment", "aura"],
     reanimator: ["graveyard", "return"],
   };
-  const themeWords = archKw[opts.archetype] ?? [];
-  const themeQ = themeWords.length ? ` (o:${themeWords[0]}${themeWords[1] ? ` or o:${themeWords[1]}` : ""})` : "";
+  const themeWords = opts.archetypes
+    .flatMap((a) => archKw[a] ?? [])
+    .filter((v, i, arr) => arr.indexOf(v) === i);
+  const themeQ = themeWords.length
+    ? ` (o:${themeWords[0]}${themeWords.slice(1).map((w) => ` or o:${w}`).join("")})`
+    : "";
 
   // EDH staples by role with target counts.
   const roles: Array<{ q: string; count: number }> = [
@@ -184,7 +192,7 @@ export async function buildCommanderDeck(opts: {
 export async function buildConstructedDeck(opts: {
   format: Format;
   colors: ManaColor[];
-  archetype: string;
+  archetypes: string[];
   budget?: number;
 }): Promise<{ commander: null; cards: ScryfallCard[] }> {
   const ci = opts.colors.join("").toLowerCase() || "c";
@@ -197,8 +205,12 @@ export async function buildConstructedDeck(opts: {
     tokens: "token", ramp: "ramp", tribal: "creature", voltron: "equipment",
     reanimator: "graveyard",
   };
-  const kw = archKw[opts.archetype];
-  const themeQ = kw ? ` o:${kw}` : "";
+  const kws = opts.archetypes
+    .map((a) => archKw[a])
+    .filter(Boolean);
+  const themeQ = kws.length
+    ? ` (${kws.map((kw) => `o:${kw}`).join(" or ")})`
+    : "";
 
   const roles: Array<{ q: string; count: number }> = [
     { q: `${fmt} id<=${ci} t:creature${themeQ}${priceClause}`, count: 20 },

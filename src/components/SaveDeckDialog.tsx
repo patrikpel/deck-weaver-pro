@@ -7,14 +7,14 @@ type Props = {
   open: boolean;
   onClose: () => void;
   format: Format;
-  archetype: string;
+  archetypes: string[];
   commander: ScryfallCard | null;
   cards: ScryfallCard[];
   onSaved: (shareCode: string) => void;
 };
 
 export default function SaveDeckDialog({
-  open, onClose, format, archetype, commander, cards, onSaved,
+  open, onClose, format, archetypes, commander, cards, onSaved,
 }: Props) {
   const fetchCaptcha = useServerFn(getCaptcha);
   const submit = useServerFn(saveDeck);
@@ -48,7 +48,8 @@ export default function SaveDeckDialog({
         data: {
           captchaToken: token,
           captchaAnswer: answer.trim(),
-          format, archetype,
+          format,
+          archetypes,
           commander, cards,
         },
       });
