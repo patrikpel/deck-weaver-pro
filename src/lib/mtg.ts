@@ -99,7 +99,7 @@ export async function suggestCommanders(opts: {
 // Build a Commander (100-card) decklist using Scryfall searches per role.
 export async function buildCommanderDeck(opts: {
   commander: ScryfallCard;
-  archetype: string;
+  archetypes: string[];
   budget?: number;
   powerLevel: number; // 1-10
 }): Promise<{ commander: ScryfallCard; cards: ScryfallCard[] }> {
@@ -119,8 +119,12 @@ export async function buildCommanderDeck(opts: {
     voltron: ["equipment", "aura"],
     reanimator: ["graveyard", "return"],
   };
-  const themeWords = archKw[opts.archetype] ?? [];
-  const themeQ = themeWords.length ? ` (o:${themeWords[0]}${themeWords[1] ? ` or o:${themeWords[1]}` : ""})` : "";
+  const themeWords = opts.archetypes
+    .flatMap((a) => archKw[a] ?? [])
+    .filter((v, i, arr) => arr.indexOf(v) === i);
+  const themeQ = themeWords.length
+    ? ` (o:${themeWords[0]}${themeWords.slice(1).map((w) => ` or o:${w}`).join("")})`
+    : "";
 
   // EDH staples by role with target counts.
   const roles: Array<{ q: string; count: number }> = [
