@@ -192,7 +192,7 @@ export async function buildCommanderDeck(opts: {
 export async function buildConstructedDeck(opts: {
   format: Format;
   colors: ManaColor[];
-  archetype: string;
+  archetypes: string[];
   budget?: number;
 }): Promise<{ commander: null; cards: ScryfallCard[] }> {
   const ci = opts.colors.join("").toLowerCase() || "c";
@@ -205,8 +205,12 @@ export async function buildConstructedDeck(opts: {
     tokens: "token", ramp: "ramp", tribal: "creature", voltron: "equipment",
     reanimator: "graveyard",
   };
-  const kw = archKw[opts.archetype];
-  const themeQ = kw ? ` o:${kw}` : "";
+  const kws = opts.archetypes
+    .map((a) => archKw[a])
+    .filter(Boolean);
+  const themeQ = kws.length
+    ? ` (${kws.map((kw) => `o:${kw}`).join(" or ")})`
+    : "";
 
   const roles: Array<{ q: string; count: number }> = [
     { q: `${fmt} id<=${ci} t:creature${themeQ}${priceClause}`, count: 20 },
