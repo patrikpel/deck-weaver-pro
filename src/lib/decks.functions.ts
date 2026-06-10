@@ -100,7 +100,7 @@ export const saveDeck = createServerFn({ method: "POST" })
         .insert({
           share_code: code,
           format: data.format,
-          archetype: data.archetype,
+          archetype: data.archetypes.join(" + "),
           commander_name: data.commander?.name ?? null,
           commander_image:
             (data.commander?.image_uris as { normal?: string } | undefined)?.normal ??
