@@ -65,7 +65,7 @@ const SaveDeckSchema = z.object({
   captchaToken: z.string().max(500),
   captchaAnswer: z.string().max(10),
   format: z.enum(["commander", "standard", "modern"]),
-  archetype: z.string().min(1).max(40),
+  archetypes: z.array(z.string().min(1).max(40)).min(1).max(5),
   commander: CardSchema.nullable(),
   cards: z.array(CardSchema).min(1).max(200),
 });
