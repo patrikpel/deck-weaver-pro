@@ -17,10 +17,23 @@ import {
 
 type Step = "format" | "archetype" | "options" | "commanders" | "deck";
 
+const ALL_STEPS: Step[] = ["format", "archetype", "options", "commanders", "deck"];
 const COLORS: ManaColor[] = ["W", "U", "B", "R", "G"];
+
+function stepIndex(s: Step, format: Format): number {
+  const steps: Step[] = [
+    "format",
+    "archetype",
+    "options",
+    ...(format === "commander" ? ["commanders" as Step] : []),
+    "deck",
+  ];
+  return steps.indexOf(s);
+}
 
 export default function DeckBuilder() {
   const [step, setStep] = useState<Step>("format");
+  const [furthestStepIndex, setFurthestStepIndex] = useState(0);
   const [format, setFormat] = useState<Format>("commander");
   const [archetypes, setArchetypes] = useState<string[]>([]);
   const [colors, setColors] = useState<ManaColor[]>([]);
@@ -32,11 +45,83 @@ export default function DeckBuilder() {
   const [chosenCommander, setChosenCommander] = useState<ScryfallCard | null>(null);
   const [deck, setDeck] = useState<{ commander: ScryfallCard | null; cards: ScryfallCard[] } | null>(null);
 
-  const toggleColor = (c: ManaColor) =>
-    setColors((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]));
+  const currentIdx = stepIndex(step, format);
 
-  const toggleArchetype = (id: string) =>
-    setArchetypes((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  function advanceTo(nextStep: Step) {
+    setStep(nextStep);
+    setFurthestStepIndex((cur) => Math.max(cur, stepIndex(nextStep, format)));
+  }
+
+  function goToStep(targetStep: Step) {
+    const targetIdx = stepIndex(targetStep, format);
+    if (targetIdx > furthestStepIndex) return; // can't jump forward past earned progress
+    setStep(targetStep);
+  }
+
+  function invalidateFrom(stepName: Step) {
+    const idx = stepIndex(stepName, format);
+    setFurthestStepIndex((cur) => Math.min(cur, idx));
+  }
+
+  function clearDownstream(fromStep: Step) {
+    if (fromStep === "format") {
+      setArchetypes([]);
+      setColors([]);
+      setBudget("");
+      setPower(6);
+    }
+    if (["format", "archetype", "options"].includes(fromStep)) {
+      setCommanders([]);
+      setChosenCommander(null);
+      setDeck(null);
+    }
+  }
+
+  const handleSetFormat = (f: Format) => {
+    setFormat(f);
+    if (step === "format") {
+      invalidateFrom("format");
+      clearDownstream("format");
+    }
+  };
+
+  const toggleColor = (c: ManaColor) => {
+    setColors((cur) => {
+      const next = cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c];
+      return next;
+    });
+    if (step === "options") {
+      invalidateFrom("options");
+      clearDownstream("options");
+    }
+  };
+
+  const toggleArchetype = (id: string) => {
+    setArchetypes((cur) => {
+      const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+      return next;
+    });
+    if (step === "archetype") {
+      invalidateFrom("archetype");
+      clearDownstream("archetype");
+    }
+  };
+
+  const handleSetBudget = (v: number | "") => {
+    setBudget(v);
+    if (step === "options") {
+      invalidateFrom("options");
+      clearDownstream("options");
+    }
+  };
+
+  const handleSetPower = (v: number) => {
+    setPower(v);
+    if (step === "options") {
+      invalidateFrom("options");
+      clearDownstream("options");
+    }
+  };
 
   async function fetchCommanders() {
     setLoading(true); setError(null);
@@ -47,7 +132,7 @@ export default function DeckBuilder() {
         budget: typeof budget === "number" ? budget : undefined,
       });
       setCommanders(cs);
-      setStep("commanders");
+      advanceTo("commanders");
     } catch (e) {
       setError("Couldn't reach Scryfall. Try again in a moment.");
     } finally { setLoading(false); }
@@ -76,7 +161,7 @@ export default function DeckBuilder() {
         });
         setDeck(d);
       }
-      setStep("deck");
+      advanceTo("deck");
     } catch (e) {
       setError("Deck build failed. Try different parameters.");
     } finally { setLoading(false); }
@@ -86,14 +171,16 @@ export default function DeckBuilder() {
     setStep(toStep);
     setDeck(null);
     setChosenCommander(null);
+    setCommanders([]);
     if (toStep === "format") {
       setArchetypes([]); setColors([]); setBudget(""); setPower(6);
+      setFurthestStepIndex(0);
     }
   }
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:py-16">
-      <Stepper step={step} format={format} />
+      <Stepper step={step} format={format} furthestStepIndex={furthestStepIndex} onStepClick={goToStep} />
 
       {error && (
         <div className="mb-6 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">
@@ -107,7 +194,7 @@ export default function DeckBuilder() {
             {(Object.keys(FORMAT_LABELS) as Format[]).map((f) => (
               <button
                 key={f}
-                onClick={() => setFormat(f)}
+                onClick={() => handleSetFormat(f)}
                 className={`group relative overflow-hidden rounded-xl border bg-card p-6 text-left transition hover:border-primary hover:shadow-arcane ${
                   format === f ? "border-primary ring-1 ring-primary" : "border-border"
                 }`}
@@ -126,7 +213,7 @@ export default function DeckBuilder() {
             onBack={undefined}
             next={
               <button
-                onClick={() => setStep("archetype")}
+                onClick={() => advanceTo("archetype")}
                 disabled={!format}
                 className="rounded-md bg-gold px-6 py-3 font-display text-primary-foreground shadow-arcane transition hover:opacity-90 disabled:opacity-50"
               >
@@ -164,10 +251,10 @@ export default function DeckBuilder() {
             })}
           </div>
           <NavRow
-            onBack={() => setStep("format")}
+            onBack={() => goToStep("format")}
             next={
               <button
-                onClick={() => setStep("options")}
+                onClick={() => advanceTo("options")}
                 disabled={archetypes.length === 0}
                 className="rounded-md bg-gold px-6 py-3 font-display text-primary-foreground shadow-arcane transition hover:opacity-90 disabled:opacity-50"
               >
@@ -212,7 +299,7 @@ export default function DeckBuilder() {
                 type="number"
                 min={0}
                 value={budget}
-                onChange={(e) => setBudget(e.target.value === "" ? "" : Number(e.target.value))}
+                onChange={(e) => handleSetBudget(e.target.value === "" ? "" : Number(e.target.value))}
                 placeholder="e.g. 100"
                 className="w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
               />
@@ -222,14 +309,14 @@ export default function DeckBuilder() {
               <Field label={`Power level: ${power}`} hint="1 = ultra-casual · 10 = cEDH">
                 <input
                   type="range" min={1} max={10} value={power}
-                  onChange={(e) => setPower(Number(e.target.value))}
+                  onChange={(e) => handleSetPower(Number(e.target.value))}
                   className="w-full max-w-md accent-[var(--primary)]"
                 />
               </Field>
             )}
           </div>
           <NavRow
-            onBack={() => setStep("archetype")}
+            onBack={() => goToStep("archetype")}
             next={
               <button
                 onClick={format === "commander" ? fetchCommanders : () => generateDeck()}
@@ -274,7 +361,7 @@ export default function DeckBuilder() {
             </div>
           )}
           <NavRow
-            onBack={() => setStep("options")}
+            onBack={() => goToStep("options")}
             next={
               <button
                 onClick={fetchCommanders}
@@ -305,7 +392,14 @@ export default function DeckBuilder() {
   );
 }
 
-function Stepper({ step, format }: { step: Step; format: Format }) {
+function Stepper({
+  step, format, furthestStepIndex, onStepClick,
+}: {
+  step: Step;
+  format: Format;
+  furthestStepIndex: number;
+  onStepClick: (s: Step) => void;
+}) {
   const steps: Array<{ id: Step; label: string }> = [
     { id: "format", label: "Format" },
     { id: "archetype", label: "Playstyle" },
@@ -316,19 +410,39 @@ function Stepper({ step, format }: { step: Step; format: Format }) {
   const idx = steps.findIndex((s) => s.id === step);
   return (
     <ol className="mb-10 flex flex-wrap items-center gap-2 text-xs uppercase tracking-widest">
-      {steps.map((s, i) => (
-        <li key={s.id} className="flex items-center gap-2">
-          <span
-            className={`flex h-7 w-7 items-center justify-center rounded-full border ${
-              i <= idx ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
-            }`}
-          >
-            {i + 1}
-          </span>
-          <span className={i <= idx ? "text-foreground" : "text-muted-foreground"}>{s.label}</span>
-          {i < steps.length - 1 && <span className="mx-1 text-border">·</span>}
-        </li>
-      ))}
+      {steps.map((s, i) => {
+        const clickable = i <= furthestStepIndex;
+        const active = i === idx;
+        return (
+          <li key={s.id} className="flex items-center gap-2">
+            <button
+              onClick={() => clickable && onStepClick(s.id)}
+              disabled={!clickable}
+              className={`flex h-7 w-7 items-center justify-center rounded-full border transition ${
+                active
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : i <= idx
+                  ? "border-primary/60 bg-primary/10 text-foreground"
+                  : clickable
+                  ? "border-border text-muted-foreground hover:border-primary hover:text-foreground"
+                  : "border-border text-muted-foreground opacity-50"
+              } ${clickable ? "cursor-pointer" : "cursor-default"}`}
+            >
+              {i + 1}
+            </button>
+            <button
+              onClick={() => clickable && onStepClick(s.id)}
+              disabled={!clickable}
+              className={`transition ${
+                active ? "text-foreground" : i <= idx ? "text-foreground/80" : "text-muted-foreground"
+              } ${clickable ? "cursor-pointer hover:text-foreground" : "cursor-default opacity-50"}`}
+            >
+              {s.label}
+            </button>
+            {i < steps.length - 1 && <span className="mx-1 text-border">·</span>}
+          </li>
+        );
+      })}
     </ol>
   );
 }
