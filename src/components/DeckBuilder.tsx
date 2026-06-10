@@ -256,6 +256,7 @@ export default function DeckBuilder() {
         <DeckView
           deck={deck}
           format={format}
+          archetype={archetype}
           onRestart={() => reset("format")}
           onTweak={() => reset("options")}
         />
