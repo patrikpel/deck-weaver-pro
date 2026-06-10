@@ -398,14 +398,44 @@ function DeckView({
           <button onClick={onTweak} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             Tweak parameters
           </button>
-          <button onClick={download} className="rounded-md bg-gold px-4 py-2 text-sm text-primary-foreground shadow-arcane">
+          <button onClick={download} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             Export .txt
           </button>
+          {!shareCode && (
+            <button
+              onClick={() => setSaveOpen(true)}
+              className="rounded-md bg-gold px-4 py-2 text-sm text-primary-foreground shadow-arcane"
+            >
+              Save & share
+            </button>
+          )}
           <button onClick={onRestart} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             Start over
           </button>
         </div>
       </header>
+
+      {shareCode && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/50 bg-card p-4 shadow-arcane">
+          <div className="text-xs uppercase tracking-widest text-primary">Saved · share code</div>
+          <code className="rounded bg-background px-3 py-1 font-display text-lg tracking-widest text-gold">
+            {shareCode}
+          </code>
+          <a
+            href={`/d/${shareCode}`}
+            target="_blank" rel="noreferrer"
+            className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            open link
+          </a>
+          <button
+            onClick={copyShare}
+            className="ml-auto rounded-md border border-border px-3 py-1.5 text-xs hover:border-primary"
+          >
+            {copied ? "Copied!" : "Copy URL"}
+          </button>
+        </div>
+      )}
 
       {deck.commander && (
         <div className="flex flex-col gap-6 rounded-2xl border border-primary/40 bg-card p-6 shadow-arcane sm:flex-row">
