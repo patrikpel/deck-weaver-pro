@@ -22,7 +22,7 @@ const COLORS: ManaColor[] = ["W", "U", "B", "R", "G"];
 export default function DeckBuilder() {
   const [step, setStep] = useState<Step>("format");
   const [format, setFormat] = useState<Format>("commander");
-  const [archetype, setArchetype] = useState<string>("");
+  const [archetypes, setArchetypes] = useState<string[]>([]);
   const [colors, setColors] = useState<ManaColor[]>([]);
   const [budget, setBudget] = useState<number | "">("");
   const [power, setPower] = useState<number>(6);
@@ -35,12 +35,15 @@ export default function DeckBuilder() {
   const toggleColor = (c: ManaColor) =>
     setColors((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]));
 
+  const toggleArchetype = (id: string) =>
+    setArchetypes((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+
   async function fetchCommanders() {
     setLoading(true); setError(null);
     try {
       const cs = await suggestCommanders({
         colors,
-        archetype,
+        archetypes,
         budget: typeof budget === "number" ? budget : undefined,
       });
       setCommanders(cs);
@@ -59,7 +62,7 @@ export default function DeckBuilder() {
         setChosenCommander(cmd);
         const d = await buildCommanderDeck({
           commander: cmd,
-          archetype,
+          archetypes,
           budget: typeof budget === "number" ? budget : undefined,
           powerLevel: power,
         });
@@ -68,7 +71,7 @@ export default function DeckBuilder() {
         const d = await buildConstructedDeck({
           format,
           colors,
-          archetype,
+          archetypes,
           budget: typeof budget === "number" ? budget : undefined,
         });
         setDeck(d);
@@ -84,7 +87,7 @@ export default function DeckBuilder() {
     setDeck(null);
     setChosenCommander(null);
     if (toStep === "format") {
-      setArchetype(""); setColors([]); setBudget(""); setPower(6);
+      setArchetypes([]); setColors([]); setBudget(""); setPower(6);
     }
   }
 
@@ -104,9 +107,9 @@ export default function DeckBuilder() {
             {(Object.keys(FORMAT_LABELS) as Format[]).map((f) => (
               <button
                 key={f}
-                onClick={() => { setFormat(f); setStep("archetype"); }}
+                onClick={() => setFormat(f)}
                 className={`group relative overflow-hidden rounded-xl border bg-card p-6 text-left transition hover:border-primary hover:shadow-arcane ${
-                  format === f ? "border-primary" : "border-border"
+                  format === f ? "border-primary ring-1 ring-primary" : "border-border"
                 }`}
               >
                 <div className="text-xs uppercase tracking-widest text-muted-foreground">Format</div>
@@ -119,26 +122,59 @@ export default function DeckBuilder() {
               </button>
             ))}
           </div>
+          <NavRow
+            onBack={undefined}
+            next={
+              <button
+                onClick={() => setStep("archetype")}
+                disabled={!format}
+                className="rounded-md bg-gold px-6 py-3 font-display text-primary-foreground shadow-arcane transition hover:opacity-90 disabled:opacity-50"
+              >
+                Next
+              </button>
+            }
+          />
         </Section>
       )}
 
       {step === "archetype" && (
-        <Section title="Pick a playstyle" subtitle="This is the only required choice. It shapes every card we pull.">
+        <Section title="Pick your playstyles" subtitle="Choose one or more archetypes. This shapes every card we pull.">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {ARCHETYPES.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => { setArchetype(a.id); setStep("options"); }}
-                className={`rounded-lg border bg-card p-4 text-left transition hover:border-primary hover:bg-secondary ${
-                  archetype === a.id ? "border-primary ring-1 ring-primary" : "border-border"
-                }`}
-              >
-                <div className="font-display text-lg">{a.name}</div>
-                <div className="mt-1 text-xs text-muted-foreground">{a.desc}</div>
-              </button>
-            ))}
+            {ARCHETYPES.map((a) => {
+              const active = archetypes.includes(a.id);
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => toggleArchetype(a.id)}
+                  className={`rounded-lg border bg-card p-4 text-left transition hover:border-primary hover:bg-secondary ${
+                    active ? "border-primary ring-1 ring-primary" : "border-border"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="font-display text-lg">{a.name}</div>
+                    {active && (
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+                        ✓
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">{a.desc}</div>
+                </button>
+              );
+            })}
           </div>
-          <NavRow onBack={() => setStep("format")} />
+          <NavRow
+            onBack={() => setStep("format")}
+            next={
+              <button
+                onClick={() => setStep("options")}
+                disabled={archetypes.length === 0}
+                className="rounded-md bg-gold px-6 py-3 font-display text-primary-foreground shadow-arcane transition hover:opacity-90 disabled:opacity-50"
+              >
+                Next {archetypes.length > 0 && `(${archetypes.length} selected)`}
+              </button>
+            }
+          />
         </Section>
       )}
 
@@ -234,7 +270,7 @@ export default function DeckBuilder() {
           </div>
           {commanders.length === 0 && !loading && (
             <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
-              No commanders matched. Try different colors or archetype.
+              No commanders matched. Try different colors or archetypes.
             </div>
           )}
           <NavRow
@@ -256,7 +292,7 @@ export default function DeckBuilder() {
         <DeckView
           deck={deck}
           format={format}
-          archetype={archetype}
+          archetypes={archetypes}
           onRestart={() => reset("format")}
           onTweak={() => reset("options")}
         />
@@ -321,12 +357,12 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-function NavRow({ onBack, next }: { onBack?: () => void; next?: React.ReactNode }) {
+function NavRow({ onBack, next }: { onBack?: (() => void) | undefined; next?: React.ReactNode }) {
   return (
     <div className="mt-8 flex items-center justify-between">
       {onBack ? (
-        <button onClick={onBack} className="text-sm text-muted-foreground hover:text-foreground">
-          ← Back
+        <button onClick={onBack} className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground transition hover:border-primary hover:text-foreground">
+          ← Previous
         </button>
       ) : <span />}
       {next}
@@ -335,11 +371,11 @@ function NavRow({ onBack, next }: { onBack?: () => void; next?: React.ReactNode 
 }
 
 function DeckView({
-  deck, format, archetype, onRestart, onTweak,
+  deck, format, archetypes, onRestart, onTweak,
 }: {
   deck: { commander: ScryfallCard | null; cards: ScryfallCard[] };
   format: Format;
-  archetype: string;
+  archetypes: string[];
   onRestart: () => void;
   onTweak: () => void;
 }) {
@@ -388,7 +424,7 @@ function DeckView({
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="text-xs uppercase tracking-widest text-muted-foreground">
-            {FORMAT_LABELS[format]} · {total} cards · ~${price.toFixed(2)}
+            {FORMAT_LABELS[format]} · {archetypes.map((a) => ARCHETYPES.find((x) => x.id === a)?.name ?? a).join(" + ")} · {total} cards · ~${price.toFixed(2)}
           </div>
           <h2 className="mt-1 font-display text-3xl text-gold sm:text-4xl">
             {deck.commander?.name ?? "Your Deck"}
@@ -482,7 +518,7 @@ function DeckView({
         open={saveOpen}
         onClose={() => setSaveOpen(false)}
         format={format}
-        archetype={archetype}
+        archetypes={archetypes}
         commander={deck.commander}
         cards={deck.cards}
         onSaved={(code) => { setShareCode(code); setSaveOpen(false); }}
