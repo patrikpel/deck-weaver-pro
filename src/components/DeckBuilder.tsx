@@ -477,6 +477,16 @@ function DeckView({
           </a>
         ))}
       </div>
+
+      <SaveDeckDialog
+        open={saveOpen}
+        onClose={() => setSaveOpen(false)}
+        format={format}
+        archetype={archetype}
+        commander={deck.commander}
+        cards={deck.cards}
+        onSaved={(code) => { setShareCode(code); setSaveOpen(false); }}
+      />
     </section>
   );
 }
