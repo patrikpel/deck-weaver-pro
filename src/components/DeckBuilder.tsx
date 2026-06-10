@@ -1,4 +1,5 @@
 import { useState } from "react";
+import SaveDeckDialog from "@/components/SaveDeckDialog";
 import {
   ARCHETYPES,
   COLOR_INFO,
@@ -255,6 +256,7 @@ export default function DeckBuilder() {
         <DeckView
           deck={deck}
           format={format}
+          archetype={archetype}
           onRestart={() => reset("format")}
           onTweak={() => reset("options")}
         />
@@ -333,13 +335,18 @@ function NavRow({ onBack, next }: { onBack?: () => void; next?: React.ReactNode 
 }
 
 function DeckView({
-  deck, format, onRestart, onTweak,
+  deck, format, archetype, onRestart, onTweak,
 }: {
   deck: { commander: ScryfallCard | null; cards: ScryfallCard[] };
   format: Format;
+  archetype: string;
   onRestart: () => void;
   onTweak: () => void;
 }) {
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [shareCode, setShareCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   const total = deck.cards.length + (deck.commander ? 1 : 0);
   const price = deck.cards.reduce((s, c) => s + (parseFloat(c.prices?.usd ?? "0") || 0), 0)
     + (deck.commander ? parseFloat(deck.commander.prices?.usd ?? "0") || 0 : 0);
@@ -367,6 +374,15 @@ function DeckView({
     URL.revokeObjectURL(url);
   }
 
+  const shareUrl = shareCode && typeof window !== "undefined"
+    ? `${window.location.origin}/d/${shareCode}`
+    : "";
+
+  async function copyShare() {
+    if (!shareUrl) return;
+    try { await navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
+  }
+
   return (
     <section className="space-y-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -382,14 +398,44 @@ function DeckView({
           <button onClick={onTweak} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             Tweak parameters
           </button>
-          <button onClick={download} className="rounded-md bg-gold px-4 py-2 text-sm text-primary-foreground shadow-arcane">
+          <button onClick={download} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             Export .txt
           </button>
+          {!shareCode && (
+            <button
+              onClick={() => setSaveOpen(true)}
+              className="rounded-md bg-gold px-4 py-2 text-sm text-primary-foreground shadow-arcane"
+            >
+              Save & share
+            </button>
+          )}
           <button onClick={onRestart} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             Start over
           </button>
         </div>
       </header>
+
+      {shareCode && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/50 bg-card p-4 shadow-arcane">
+          <div className="text-xs uppercase tracking-widest text-primary">Saved · share code</div>
+          <code className="rounded bg-background px-3 py-1 font-display text-lg tracking-widest text-gold">
+            {shareCode}
+          </code>
+          <a
+            href={`/d/${shareCode}`}
+            target="_blank" rel="noreferrer"
+            className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            open link
+          </a>
+          <button
+            onClick={copyShare}
+            className="ml-auto rounded-md border border-border px-3 py-1.5 text-xs hover:border-primary"
+          >
+            {copied ? "Copied!" : "Copy URL"}
+          </button>
+        </div>
+      )}
 
       {deck.commander && (
         <div className="flex flex-col gap-6 rounded-2xl border border-primary/40 bg-card p-6 shadow-arcane sm:flex-row">
@@ -431,6 +477,16 @@ function DeckView({
           </a>
         ))}
       </div>
+
+      <SaveDeckDialog
+        open={saveOpen}
+        onClose={() => setSaveOpen(false)}
+        format={format}
+        archetype={archetype}
+        commander={deck.commander}
+        cards={deck.cards}
+        onSaved={(code) => { setShareCode(code); setSaveOpen(false); }}
+      />
     </section>
   );
 }
