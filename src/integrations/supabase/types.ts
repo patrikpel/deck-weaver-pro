@@ -14,7 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      decks: {
+        Row: {
+          archetype: string
+          card_count: number
+          commander_image: string | null
+          commander_name: string | null
+          created_at: string
+          format: string
+          id: string
+          payload: Json
+          price_usd: number
+          share_code: string
+        }
+        Insert: {
+          archetype: string
+          card_count?: number
+          commander_image?: string | null
+          commander_name?: string | null
+          created_at?: string
+          format: string
+          id?: string
+          payload: Json
+          price_usd?: number
+          share_code: string
+        }
+        Update: {
+          archetype?: string
+          card_count?: number
+          commander_image?: string | null
+          commander_name?: string | null
+          created_at?: string
+          format?: string
+          id?: string
+          payload?: Json
+          price_usd?: number
+          share_code?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
