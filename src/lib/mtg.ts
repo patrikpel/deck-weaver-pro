@@ -161,47 +161,60 @@ export async function buildCommanderDeck(opts: {
     voltron: ["equipment", "aura"],
     reanimator: ["graveyard", "return"],
   };
-  const themeWords = opts.archetypes
-    .flatMap((a) => archKw[a] ?? [])
-    .filter((v, i, arr) => arr.indexOf(v) === i);
-  const themeQ = themeWords.length
-    ? ` (o:${themeWords[0]}${themeWords.slice(1).map((w) => ` or o:${w}`).join("")})`
-    : "";
+  // Priority-ordered list of archetype theme words (first archetype first).
+  const archThemes: string[] = opts.archetypes
+    .map((a) => (archKw[a] ?? [])[0])
+    .filter(Boolean) as string[];
 
   // EDH staples by role with target counts.
-  const roles: Array<{ q: string; count: number }> = [
-    { q: `id<=${ci} t:creature${themeQ}${priceClause} f:commander`, count: 28 },
-    { q: `id<=${ci} (t:instant or t:sorcery)${themeQ}${priceClause} f:commander`, count: 14 },
-    { q: `id<=${ci} t:artifact -t:creature${priceClause} f:commander o:"add"`, count: 10 },
-    { q: `id<=${ci} t:enchantment -t:creature${priceClause} f:commander`, count: 8 },
-    { q: `id<=${ci} t:planeswalker${priceClause} f:commander`, count: 2 },
+  const roles: Array<{ base: string; count: number; themed: boolean }> = [
+    { base: `id<=${ci} t:creature${priceClause} f:commander`, count: 28, themed: true },
+    { base: `id<=${ci} (t:instant or t:sorcery)${priceClause} f:commander`, count: 14, themed: true },
+    { base: `id<=${ci} t:artifact -t:creature${priceClause} f:commander o:"add"`, count: 10, themed: false },
+    { base: `id<=${ci} t:enchantment -t:creature${priceClause} f:commander`, count: 8, themed: false },
+    { base: `id<=${ci} t:planeswalker${priceClause} f:commander`, count: 2, themed: false },
   ];
 
   const seen = new Set<string>([opts.commander.id, opts.commander.name]);
   const picked: ScryfallCard[] = [];
+  const order = power >= 7 ? "edhrec" : "released";
 
-  for (const role of roles) {
+  async function fillRole(query: string, want: number): Promise<number> {
+    if (want <= 0) return 0;
     try {
-      const q = encodeURIComponent(role.q);
-      const order = power >= 7 ? "edhrec" : "released";
+      const q = encodeURIComponent(query);
       const data = await scry<{ data: ScryfallCard[] }>(
         `/cards/search?q=${q}&order=${order}&unique=cards`,
       );
+      let added = 0;
       for (const c of data.data) {
-        if (picked.length >= role.count + picked.length) break;
+        if (added >= want) break;
         if (seen.has(c.name)) continue;
         seen.add(c.name);
         picked.push(c);
-        if (
-          picked.length >=
-          roles.slice(0, roles.indexOf(role) + 1).reduce((s, r) => s + r.count, 0)
-        )
-          break;
+        added++;
       }
+      return added;
     } catch {
-      // skip role on failure
+      return 0;
     }
   }
+
+  for (const role of roles) {
+    if (!role.themed || archThemes.length === 0) {
+      await fillRole(role.base, role.count);
+      continue;
+    }
+    const shares = splitByPriority(role.count, archThemes.length);
+    let unfilled = 0;
+    for (let i = 0; i < archThemes.length; i++) {
+      const want = shares[i] + unfilled;
+      const got = await fillRole(`${role.base} o:${archThemes[i]}`, want);
+      unfilled = want - got;
+    }
+    if (unfilled > 0) await fillRole(role.base, unfilled);
+  }
+
 
   // Lands: fill remainder with basics matching color identity.
   const basicNames: Record<string, string> = {
