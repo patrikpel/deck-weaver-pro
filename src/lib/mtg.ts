@@ -60,16 +60,36 @@ export function cardArt(c: ScryfallCard): string | undefined {
   return c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop;
 }
 
+// Weights for priority-ordered archetypes: first is heaviest.
+// e.g. 3 archetypes -> [3, 2, 1] => 50% / 33% / 17%.
+function priorityWeights(n: number): number[] {
+  const raw = Array.from({ length: n }, (_, i) => n - i);
+  const sum = raw.reduce((a, b) => a + b, 0);
+  return raw.map((w) => w / sum);
+}
+
+// Split a target count across N priorities (largest first, sums to total).
+function splitByPriority(total: number, n: number): number[] {
+  if (n <= 0) return [];
+  const weights = priorityWeights(n);
+  const parts = weights.map((w) => Math.floor(w * total));
+  let remainder = total - parts.reduce((a, b) => a + b, 0);
+  for (let i = 0; remainder > 0; i = (i + 1) % n, remainder--) parts[i] += 1;
+  return parts;
+}
+
 // Suggest commanders matching the user's choices.
+// Archetypes are priority-ordered: first selected has the biggest impact.
 export async function suggestCommanders(opts: {
   colors: ManaColor[];
   archetypes: string[];
   budget?: number;
 }): Promise<ScryfallCard[]> {
-  const parts = ["is:commander", "game:paper"];
+  const baseParts = ["is:commander", "game:paper"];
   if (opts.colors.length) {
-    parts.push(`id:${opts.colors.join("").toLowerCase() || "c"}`);
+    baseParts.push(`id:${opts.colors.join("").toLowerCase() || "c"}`);
   }
+  if (opts.budget) baseParts.push(`usd<=${Math.max(1, Math.floor(opts.budget / 20))}`);
   // Loosely tie archetype to a keyword for commander discovery.
   const archKeyword: Record<string, string> = {
     aggro: "haste",
@@ -82,19 +102,41 @@ export async function suggestCommanders(opts: {
     voltron: "equipment",
     reanimator: "graveyard",
   };
-  const kws = opts.archetypes
-    .map((a) => archKeyword[a])
-    .filter(Boolean);
-  if (kws.length) {
-    parts.push(`(${kws.map((kw) => `o:${kw}`).join(" or ")})`);
+  const kws = opts.archetypes.map((a) => archKeyword[a]).filter(Boolean);
+  // Query per priority and merge; first archetype contributes most.
+  const TOTAL = 9;
+  if (kws.length === 0) {
+    const q = encodeURIComponent(baseParts.join(" "));
+    const data = await scry<{ data: ScryfallCard[] }>(
+      `/cards/search?q=${q}&order=edhrec&unique=cards&page=1`,
+    );
+    return data.data.slice(0, TOTAL);
   }
-  if (opts.budget) parts.push(`usd<=${Math.max(1, Math.floor(opts.budget / 20))}`);
-  const q = encodeURIComponent(parts.join(" "));
-  const data = await scry<{ data: ScryfallCard[] }>(
-    `/cards/search?q=${q}&order=edhrec&unique=cards&page=1`,
-  );
-  return data.data.slice(0, 9);
+  const shares = splitByPriority(TOTAL, kws.length);
+  const seen = new Set<string>();
+  const out: ScryfallCard[] = [];
+  for (let i = 0; i < kws.length; i++) {
+    const want = shares[i];
+    if (want <= 0) continue;
+    const parts = [...baseParts, `o:${kws[i]}`];
+    const q = encodeURIComponent(parts.join(" "));
+    try {
+      const data = await scry<{ data: ScryfallCard[] }>(
+        `/cards/search?q=${q}&order=edhrec&unique=cards&page=1`,
+      );
+      let added = 0;
+      for (const c of data.data) {
+        if (added >= want) break;
+        if (seen.has(c.name)) continue;
+        seen.add(c.name);
+        out.push(c);
+        added++;
+      }
+    } catch {}
+  }
+  return out.slice(0, TOTAL);
 }
+
 
 // Build a Commander (100-card) decklist using Scryfall searches per role.
 export async function buildCommanderDeck(opts: {
