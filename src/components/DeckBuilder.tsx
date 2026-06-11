@@ -76,7 +76,7 @@ export default function DeckBuilder() {
       setArchetypes([]);
       setColors([]);
       setBudget("");
-      setPower(6);
+      setBracket(2);
     }
     if (["format", "archetype", "options"].includes(fromStep)) {
       setCommanders([]);
@@ -123,8 +123,8 @@ export default function DeckBuilder() {
     }
   };
 
-  const handleSetPower = (v: number) => {
-    setPower(v);
+  const handleSetBracket = (v: number) => {
+    setBracket(v);
     if (step === "options") {
       invalidateFrom("options");
       clearDownstream("options");
@@ -157,7 +157,7 @@ export default function DeckBuilder() {
           commander: cmd,
           archetypes,
           budget: typeof budget === "number" ? budget : undefined,
-          powerLevel: power,
+          powerLevel: BRACKETS.find((b) => b.id === bracket)?.power ?? 6,
         });
         setDeck(d);
       } else {
@@ -181,7 +181,7 @@ export default function DeckBuilder() {
     setChosenCommander(null);
     setCommanders([]);
     if (toStep === "format") {
-      setArchetypes([]); setColors([]); setBudget(""); setPower(6);
+      setArchetypes([]); setColors([]); setBudget(""); setBracket(2);
       setFurthestStepIndex(0);
     }
   }
@@ -319,12 +319,29 @@ export default function DeckBuilder() {
             </Field>
 
             {format === "commander" && (
-              <Field label={`Power level: ${power}`} hint="1 = ultra-casual · 10 = cEDH">
-                <input
-                  type="range" min={1} max={10} value={power}
-                  onChange={(e) => handleSetPower(Number(e.target.value))}
-                  className="w-full max-w-md accent-[var(--primary)]"
-                />
+              <Field label="Bracket" hint="Official Commander brackets — sets the deck's competitive ceiling.">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                  {BRACKETS.map((b) => {
+                    const active = bracket === b.id;
+                    return (
+                      <button
+                        key={b.id}
+                        onClick={() => handleSetBracket(b.id)}
+                        className={`rounded-lg border bg-background p-3 text-left transition hover:border-primary ${
+                          active ? "border-primary ring-1 ring-primary" : "border-border"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="font-display text-base">{b.id}. {b.name}</div>
+                          {active && (
+                            <span className="h-2 w-2 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">{b.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
               </Field>
             )}
           </div>
