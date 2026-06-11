@@ -225,10 +225,11 @@ export default function DeckBuilder() {
       )}
 
       {step === "archetype" && (
-        <Section title="Pick your playstyles" subtitle="Choose one or more archetypes. This shapes every card we pull.">
+        <Section title="Pick your playstyles" subtitle="Click to add. The order you pick sets the priority — #1 has the biggest impact on the deck.">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {ARCHETYPES.map((a) => {
-              const active = archetypes.includes(a.id);
+              const priority = archetypes.indexOf(a.id);
+              const active = priority >= 0;
               return (
                 <button
                   key={a.id}
@@ -240,8 +241,11 @@ export default function DeckBuilder() {
                   <div className="flex items-center justify-between">
                     <div className="font-display text-lg">{a.name}</div>
                     {active && (
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
-                        ✓
+                      <span
+                        title={`Priority ${priority + 1}`}
+                        className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground"
+                      >
+                        {priority + 1}
                       </span>
                     )}
                   </div>
@@ -264,6 +268,7 @@ export default function DeckBuilder() {
           />
         </Section>
       )}
+
 
       {step === "options" && (
         <Section title="Refine (optional)" subtitle="All optional. Skip to see what the planeswalkers suggest.">

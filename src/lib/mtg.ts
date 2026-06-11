@@ -60,16 +60,36 @@ export function cardArt(c: ScryfallCard): string | undefined {
   return c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop;
 }
 
+// Weights for priority-ordered archetypes: first is heaviest.
+// e.g. 3 archetypes -> [3, 2, 1] => 50% / 33% / 17%.
+function priorityWeights(n: number): number[] {
+  const raw = Array.from({ length: n }, (_, i) => n - i);
+  const sum = raw.reduce((a, b) => a + b, 0);
+  return raw.map((w) => w / sum);
+}
+
+// Split a target count across N priorities (largest first, sums to total).
+function splitByPriority(total: number, n: number): number[] {
+  if (n <= 0) return [];
+  const weights = priorityWeights(n);
+  const parts = weights.map((w) => Math.floor(w * total));
+  let remainder = total - parts.reduce((a, b) => a + b, 0);
+  for (let i = 0; remainder > 0; i = (i + 1) % n, remainder--) parts[i] += 1;
+  return parts;
+}
+
 // Suggest commanders matching the user's choices.
+// Archetypes are priority-ordered: first selected has the biggest impact.
 export async function suggestCommanders(opts: {
   colors: ManaColor[];
   archetypes: string[];
   budget?: number;
 }): Promise<ScryfallCard[]> {
-  const parts = ["is:commander", "game:paper"];
+  const baseParts = ["is:commander", "game:paper"];
   if (opts.colors.length) {
-    parts.push(`id:${opts.colors.join("").toLowerCase() || "c"}`);
+    baseParts.push(`id:${opts.colors.join("").toLowerCase() || "c"}`);
   }
+  if (opts.budget) baseParts.push(`usd<=${Math.max(1, Math.floor(opts.budget / 20))}`);
   // Loosely tie archetype to a keyword for commander discovery.
   const archKeyword: Record<string, string> = {
     aggro: "haste",
@@ -82,19 +102,41 @@ export async function suggestCommanders(opts: {
     voltron: "equipment",
     reanimator: "graveyard",
   };
-  const kws = opts.archetypes
-    .map((a) => archKeyword[a])
-    .filter(Boolean);
-  if (kws.length) {
-    parts.push(`(${kws.map((kw) => `o:${kw}`).join(" or ")})`);
+  const kws = opts.archetypes.map((a) => archKeyword[a]).filter(Boolean);
+  // Query per priority and merge; first archetype contributes most.
+  const TOTAL = 9;
+  if (kws.length === 0) {
+    const q = encodeURIComponent(baseParts.join(" "));
+    const data = await scry<{ data: ScryfallCard[] }>(
+      `/cards/search?q=${q}&order=edhrec&unique=cards&page=1`,
+    );
+    return data.data.slice(0, TOTAL);
   }
-  if (opts.budget) parts.push(`usd<=${Math.max(1, Math.floor(opts.budget / 20))}`);
-  const q = encodeURIComponent(parts.join(" "));
-  const data = await scry<{ data: ScryfallCard[] }>(
-    `/cards/search?q=${q}&order=edhrec&unique=cards&page=1`,
-  );
-  return data.data.slice(0, 9);
+  const shares = splitByPriority(TOTAL, kws.length);
+  const seen = new Set<string>();
+  const out: ScryfallCard[] = [];
+  for (let i = 0; i < kws.length; i++) {
+    const want = shares[i];
+    if (want <= 0) continue;
+    const parts = [...baseParts, `o:${kws[i]}`];
+    const q = encodeURIComponent(parts.join(" "));
+    try {
+      const data = await scry<{ data: ScryfallCard[] }>(
+        `/cards/search?q=${q}&order=edhrec&unique=cards&page=1`,
+      );
+      let added = 0;
+      for (const c of data.data) {
+        if (added >= want) break;
+        if (seen.has(c.name)) continue;
+        seen.add(c.name);
+        out.push(c);
+        added++;
+      }
+    } catch {}
+  }
+  return out.slice(0, TOTAL);
 }
+
 
 // Build a Commander (100-card) decklist using Scryfall searches per role.
 export async function buildCommanderDeck(opts: {
@@ -119,47 +161,60 @@ export async function buildCommanderDeck(opts: {
     voltron: ["equipment", "aura"],
     reanimator: ["graveyard", "return"],
   };
-  const themeWords = opts.archetypes
-    .flatMap((a) => archKw[a] ?? [])
-    .filter((v, i, arr) => arr.indexOf(v) === i);
-  const themeQ = themeWords.length
-    ? ` (o:${themeWords[0]}${themeWords.slice(1).map((w) => ` or o:${w}`).join("")})`
-    : "";
+  // Priority-ordered list of archetype theme words (first archetype first).
+  const archThemes: string[] = opts.archetypes
+    .map((a) => (archKw[a] ?? [])[0])
+    .filter(Boolean) as string[];
 
   // EDH staples by role with target counts.
-  const roles: Array<{ q: string; count: number }> = [
-    { q: `id<=${ci} t:creature${themeQ}${priceClause} f:commander`, count: 28 },
-    { q: `id<=${ci} (t:instant or t:sorcery)${themeQ}${priceClause} f:commander`, count: 14 },
-    { q: `id<=${ci} t:artifact -t:creature${priceClause} f:commander o:"add"`, count: 10 },
-    { q: `id<=${ci} t:enchantment -t:creature${priceClause} f:commander`, count: 8 },
-    { q: `id<=${ci} t:planeswalker${priceClause} f:commander`, count: 2 },
+  const roles: Array<{ base: string; count: number; themed: boolean }> = [
+    { base: `id<=${ci} t:creature${priceClause} f:commander`, count: 28, themed: true },
+    { base: `id<=${ci} (t:instant or t:sorcery)${priceClause} f:commander`, count: 14, themed: true },
+    { base: `id<=${ci} t:artifact -t:creature${priceClause} f:commander o:"add"`, count: 10, themed: false },
+    { base: `id<=${ci} t:enchantment -t:creature${priceClause} f:commander`, count: 8, themed: false },
+    { base: `id<=${ci} t:planeswalker${priceClause} f:commander`, count: 2, themed: false },
   ];
 
   const seen = new Set<string>([opts.commander.id, opts.commander.name]);
   const picked: ScryfallCard[] = [];
+  const order = power >= 7 ? "edhrec" : "released";
 
-  for (const role of roles) {
+  async function fillRole(query: string, want: number): Promise<number> {
+    if (want <= 0) return 0;
     try {
-      const q = encodeURIComponent(role.q);
-      const order = power >= 7 ? "edhrec" : "released";
+      const q = encodeURIComponent(query);
       const data = await scry<{ data: ScryfallCard[] }>(
         `/cards/search?q=${q}&order=${order}&unique=cards`,
       );
+      let added = 0;
       for (const c of data.data) {
-        if (picked.length >= role.count + picked.length) break;
+        if (added >= want) break;
         if (seen.has(c.name)) continue;
         seen.add(c.name);
         picked.push(c);
-        if (
-          picked.length >=
-          roles.slice(0, roles.indexOf(role) + 1).reduce((s, r) => s + r.count, 0)
-        )
-          break;
+        added++;
       }
+      return added;
     } catch {
-      // skip role on failure
+      return 0;
     }
   }
+
+  for (const role of roles) {
+    if (!role.themed || archThemes.length === 0) {
+      await fillRole(role.base, role.count);
+      continue;
+    }
+    const shares = splitByPriority(role.count, archThemes.length);
+    let unfilled = 0;
+    for (let i = 0; i < archThemes.length; i++) {
+      const want = shares[i] + unfilled;
+      const got = await fillRole(`${role.base} o:${archThemes[i]}`, want);
+      unfilled = want - got;
+    }
+    if (unfilled > 0) await fillRole(role.base, unfilled);
+  }
+
 
   // Lands: fill remainder with basics matching color identity.
   const basicNames: Record<string, string> = {
@@ -205,41 +260,56 @@ export async function buildConstructedDeck(opts: {
     tokens: "token", ramp: "ramp", tribal: "creature", voltron: "equipment",
     reanimator: "graveyard",
   };
-  const kws = opts.archetypes
-    .map((a) => archKw[a])
-    .filter(Boolean);
-  const themeQ = kws.length
-    ? ` (${kws.map((kw) => `o:${kw}`).join(" or ")})`
-    : "";
+  const kws = opts.archetypes.map((a) => archKw[a]).filter(Boolean) as string[];
 
-  const roles: Array<{ q: string; count: number }> = [
-    { q: `${fmt} id<=${ci} t:creature${themeQ}${priceClause}`, count: 20 },
-    { q: `${fmt} id<=${ci} (t:instant or t:sorcery)${themeQ}${priceClause}`, count: 12 },
-    { q: `${fmt} id<=${ci} (t:artifact or t:enchantment) -t:creature${priceClause}`, count: 4 },
+  const roles: Array<{ base: string; count: number; themed: boolean }> = [
+    { base: `${fmt} id<=${ci} t:creature${priceClause}`, count: 20, themed: true },
+    { base: `${fmt} id<=${ci} (t:instant or t:sorcery)${priceClause}`, count: 12, themed: true },
+    { base: `${fmt} id<=${ci} (t:artifact or t:enchantment) -t:creature${priceClause}`, count: 4, themed: false },
   ];
 
   const seen = new Set<string>();
   const picked: ScryfallCard[] = [];
-  for (const role of roles) {
+
+  async function fillRole(query: string, want: number): Promise<number> {
+    if (want <= 0) return 0;
     try {
-      const q = encodeURIComponent(role.q);
+      const q = encodeURIComponent(query);
       const data = await scry<{ data: ScryfallCard[] }>(
         `/cards/search?q=${q}&order=edhrec&unique=cards`,
       );
       let added = 0;
       for (const c of data.data) {
-        if (added >= role.count) break;
+        if (added >= want) break;
         if (seen.has(c.name)) continue;
         seen.add(c.name);
-        // Constructed allows 4-ofs
-        const copies = Math.min(4, role.count - added);
-        for (let i = 0; i < copies && added < role.count; i++) {
+        const copies = Math.min(4, want - added);
+        for (let i = 0; i < copies && added < want; i++) {
           picked.push({ ...c, id: `${c.id}-${i}` });
           added++;
         }
       }
-    } catch {}
+      return added;
+    } catch {
+      return 0;
+    }
   }
+
+  for (const role of roles) {
+    if (!role.themed || kws.length === 0) {
+      await fillRole(role.base, role.count);
+      continue;
+    }
+    const shares = splitByPriority(role.count, kws.length);
+    let unfilled = 0;
+    for (let i = 0; i < kws.length; i++) {
+      const want = shares[i] + unfilled;
+      const got = await fillRole(`${role.base} o:${kws[i]}`, want);
+      unfilled = want - got;
+    }
+    if (unfilled > 0) await fillRole(role.base, unfilled);
+  }
+
 
   // Lands: 24 basics distributed across colors.
   const basicNames: Record<string, string> = {
