@@ -20,6 +20,14 @@ type Step = "format" | "archetype" | "options" | "commanders" | "deck";
 const ALL_STEPS: Step[] = ["format", "archetype", "options", "commanders", "deck"];
 const COLORS: ManaColor[] = ["W", "U", "B", "R", "G"];
 
+export const BRACKETS: Array<{ id: number; name: string; desc: string; power: number }> = [
+  { id: 1, name: "Exhibition", desc: "Ultra-casual, jank and theme decks. No game-changers.", power: 2 },
+  { id: 2, name: "Core", desc: "Average precon power. Few tutors, no fast mana.", power: 4 },
+  { id: 3, name: "Upgraded", desc: "Above-precon. Up to 3 game-changers allowed.", power: 6 },
+  { id: 4, name: "Optimized", desc: "High-power. No restrictions outside the ban list.", power: 8 },
+  { id: 5, name: "cEDH", desc: "Tournament-tuned for the fastest possible win.", power: 10 },
+];
+
 function stepIndex(s: Step, format: Format): number {
   const steps: Step[] = [
     "format",
