@@ -260,41 +260,56 @@ export async function buildConstructedDeck(opts: {
     tokens: "token", ramp: "ramp", tribal: "creature", voltron: "equipment",
     reanimator: "graveyard",
   };
-  const kws = opts.archetypes
-    .map((a) => archKw[a])
-    .filter(Boolean);
-  const themeQ = kws.length
-    ? ` (${kws.map((kw) => `o:${kw}`).join(" or ")})`
-    : "";
+  const kws = opts.archetypes.map((a) => archKw[a]).filter(Boolean) as string[];
 
-  const roles: Array<{ q: string; count: number }> = [
-    { q: `${fmt} id<=${ci} t:creature${themeQ}${priceClause}`, count: 20 },
-    { q: `${fmt} id<=${ci} (t:instant or t:sorcery)${themeQ}${priceClause}`, count: 12 },
-    { q: `${fmt} id<=${ci} (t:artifact or t:enchantment) -t:creature${priceClause}`, count: 4 },
+  const roles: Array<{ base: string; count: number; themed: boolean }> = [
+    { base: `${fmt} id<=${ci} t:creature${priceClause}`, count: 20, themed: true },
+    { base: `${fmt} id<=${ci} (t:instant or t:sorcery)${priceClause}`, count: 12, themed: true },
+    { base: `${fmt} id<=${ci} (t:artifact or t:enchantment) -t:creature${priceClause}`, count: 4, themed: false },
   ];
 
   const seen = new Set<string>();
   const picked: ScryfallCard[] = [];
-  for (const role of roles) {
+
+  async function fillRole(query: string, want: number): Promise<number> {
+    if (want <= 0) return 0;
     try {
-      const q = encodeURIComponent(role.q);
+      const q = encodeURIComponent(query);
       const data = await scry<{ data: ScryfallCard[] }>(
         `/cards/search?q=${q}&order=edhrec&unique=cards`,
       );
       let added = 0;
       for (const c of data.data) {
-        if (added >= role.count) break;
+        if (added >= want) break;
         if (seen.has(c.name)) continue;
         seen.add(c.name);
-        // Constructed allows 4-ofs
-        const copies = Math.min(4, role.count - added);
-        for (let i = 0; i < copies && added < role.count; i++) {
+        const copies = Math.min(4, want - added);
+        for (let i = 0; i < copies && added < want; i++) {
           picked.push({ ...c, id: `${c.id}-${i}` });
           added++;
         }
       }
-    } catch {}
+      return added;
+    } catch {
+      return 0;
+    }
   }
+
+  for (const role of roles) {
+    if (!role.themed || kws.length === 0) {
+      await fillRole(role.base, role.count);
+      continue;
+    }
+    const shares = splitByPriority(role.count, kws.length);
+    let unfilled = 0;
+    for (let i = 0; i < kws.length; i++) {
+      const want = shares[i] + unfilled;
+      const got = await fillRole(`${role.base} o:${kws[i]}`, want);
+      unfilled = want - got;
+    }
+    if (unfilled > 0) await fillRole(role.base, unfilled);
+  }
+
 
   // Lands: 24 basics distributed across colors.
   const basicNames: Record<string, string> = {
