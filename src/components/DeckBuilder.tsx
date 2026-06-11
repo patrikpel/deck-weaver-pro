@@ -38,7 +38,7 @@ export default function DeckBuilder() {
   const [archetypes, setArchetypes] = useState<string[]>([]);
   const [colors, setColors] = useState<ManaColor[]>([]);
   const [budget, setBudget] = useState<number | "">("");
-  const [power, setPower] = useState<number>(6);
+  const [bracket, setBracket] = useState<number>(2);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [commanders, setCommanders] = useState<ScryfallCard[]>([]);
