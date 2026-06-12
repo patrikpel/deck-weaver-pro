@@ -17,6 +17,7 @@ export type Database = {
       decks: {
         Row: {
           archetype: string
+          archetypes: string[]
           card_count: number
           commander_image: string | null
           commander_name: string | null
@@ -29,6 +30,7 @@ export type Database = {
         }
         Insert: {
           archetype: string
+          archetypes?: string[]
           card_count?: number
           commander_image?: string | null
           commander_name?: string | null
@@ -41,6 +43,7 @@ export type Database = {
         }
         Update: {
           archetype?: string
+          archetypes?: string[]
           card_count?: number
           commander_image?: string | null
           commander_name?: string | null

@@ -101,6 +101,7 @@ export const saveDeck = createServerFn({ method: "POST" })
           share_code: code,
           format: data.format,
           archetype: data.archetypes.join(" + "),
+          archetypes: data.archetypes,
           commander_name: data.commander?.name ?? null,
           commander_image:
             (data.commander?.image_uris as { normal?: string } | undefined)?.normal ??
@@ -110,7 +111,7 @@ export const saveDeck = createServerFn({ method: "POST" })
           card_count: data.cards.length + (data.commander ? 1 : 0),
           price_usd: Number(price.toFixed(2)),
           payload: { commander: data.commander, cards: data.cards } as never,
-        })
+        } as never)
         .select("share_code")
         .single();
       if (!error && row) return { shareCode: row.share_code };
@@ -129,7 +130,7 @@ export const getDeckByCode = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row, error } = await supabaseAdmin
       .from("decks")
-      .select("share_code, format, archetype, commander_name, commander_image, card_count, price_usd, payload, created_at")
+      .select("share_code, format, archetype, archetypes, commander_name, commander_image, card_count, price_usd, payload, created_at")
       .eq("share_code", data.code.toUpperCase())
       .maybeSingle();
     if (error) throw new Error(error.message);
