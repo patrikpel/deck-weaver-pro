@@ -101,6 +101,7 @@ export const saveDeck = createServerFn({ method: "POST" })
           share_code: code,
           format: data.format,
           archetype: data.archetypes.join(" + "),
+          archetypes: data.archetypes,
           commander_name: data.commander?.name ?? null,
           commander_image:
             (data.commander?.image_uris as { normal?: string } | undefined)?.normal ??
@@ -110,7 +111,7 @@ export const saveDeck = createServerFn({ method: "POST" })
           card_count: data.cards.length + (data.commander ? 1 : 0),
           price_usd: Number(price.toFixed(2)),
           payload: { commander: data.commander, cards: data.cards } as never,
-        })
+        } as never)
         .select("share_code")
         .single();
       if (!error && row) return { shareCode: row.share_code };
