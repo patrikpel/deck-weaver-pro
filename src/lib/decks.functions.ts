@@ -130,7 +130,7 @@ export const getDeckByCode = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row, error } = await supabaseAdmin
       .from("decks")
-      .select("share_code, format, archetype, commander_name, commander_image, card_count, price_usd, payload, created_at")
+      .select("share_code, format, archetype, archetypes, commander_name, commander_image, card_count, price_usd, payload, created_at")
       .eq("share_code", data.code.toUpperCase())
       .maybeSingle();
     if (error) throw new Error(error.message);
