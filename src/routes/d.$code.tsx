@@ -84,7 +84,10 @@ function DeckPage() {
       <main className="mx-auto max-w-6xl space-y-8 px-4 py-10">
         <header>
           <div className="text-xs uppercase tracking-widest text-muted-foreground">
-            {FORMAT_LABELS[data.format as keyof typeof FORMAT_LABELS] ?? data.format} · {data.archetype} ·
+            {FORMAT_LABELS[data.format as keyof typeof FORMAT_LABELS] ?? data.format} ·{" "}
+            {((data as { archetypes?: string[] }).archetypes?.length
+              ? (data as { archetypes: string[] }).archetypes.join(" → ")
+              : data.archetype)} ·
             {" "}{data.card_count} cards · ~${Number(data.price_usd).toFixed(2)}
           </div>
           <h1 className="mt-1 font-display text-3xl text-gold sm:text-4xl">
