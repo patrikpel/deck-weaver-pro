@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import SaveDeckDialog from "@/components/SaveDeckDialog";
 import {
   ARCHETYPES,
@@ -9,6 +9,8 @@ import {
   cardArt,
   cardImage,
   deckToText,
+  searchCards,
+  searchCommanders,
   suggestCommanders,
   type Format,
   type ManaColor,
