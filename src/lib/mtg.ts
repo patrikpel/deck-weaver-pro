@@ -60,10 +60,11 @@ export function cardArt(c: ScryfallCard): string | undefined {
   return c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop;
 }
 
-// Weights for priority-ordered archetypes: first is heaviest.
-// e.g. 3 archetypes -> [3, 2, 1] => 50% / 33% / 17%.
+// Weights for priority-ordered archetypes: first is heaviest, but secondaries
+// still get a meaningful share. Uses a gentler decay so e.g. 3 archetypes
+// split roughly 40% / 33% / 27% instead of 50% / 33% / 17%.
 function priorityWeights(n: number): number[] {
-  const raw = Array.from({ length: n }, (_, i) => n - i);
+  const raw = Array.from({ length: n }, (_, i) => n - i * 0.5);
   const sum = raw.reduce((a, b) => a + b, 0);
   return raw.map((w) => w / sum);
 }
