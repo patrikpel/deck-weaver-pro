@@ -603,6 +603,9 @@ function DeckView({
           <button onClick={onTweak} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             Tweak parameters
           </button>
+          <button onClick={() => setSwapOpen(true)} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
+            Swap cards
+          </button>
           <button onClick={() => setListOpen(true)} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             View decklist
           </button>
