@@ -526,6 +526,18 @@ function DeckView({
   const [saveOpen, setSaveOpen] = useState(false);
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  const [listCopied, setListCopied] = useState(false);
+
+  const decklistText = deckToText(deck.commander, deck.cards);
+
+  async function copyDecklist() {
+    try {
+      await navigator.clipboard.writeText(decklistText);
+      setListCopied(true);
+      setTimeout(() => setListCopied(false), 2000);
+    } catch {}
+  }
 
   const total = deck.cards.length + (deck.commander ? 1 : 0);
   const price = deck.cards.reduce((s, c) => s + (parseFloat(c.prices?.usd ?? "0") || 0), 0)
@@ -577,6 +589,12 @@ function DeckView({
         <div className="flex flex-wrap gap-2">
           <button onClick={onTweak} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             Tweak parameters
+          </button>
+          <button onClick={() => setListOpen(true)} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
+            View decklist
+          </button>
+          <button onClick={copyDecklist} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
+            {listCopied ? "Copied!" : "Copy decklist"}
           </button>
           <button onClick={download} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             Export .txt
@@ -667,6 +685,35 @@ function DeckView({
         cards={deck.cards}
         onSaved={(code) => { setShareCode(code); setSaveOpen(false); }}
       />
+
+      {listOpen && (
+        <div
+          onClick={() => setListOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex max-h-[85vh] w-full max-w-2xl flex-col gap-3 rounded-xl border border-border bg-card p-5 shadow-arcane"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-display text-xl">Decklist</h3>
+              <div className="flex gap-2">
+                <button onClick={copyDecklist} className="rounded-md border border-border px-3 py-1.5 text-xs hover:border-primary">
+                  {listCopied ? "Copied!" : "Copy"}
+                </button>
+                <button onClick={() => setListOpen(false)} className="rounded-md border border-border px-3 py-1.5 text-xs hover:border-primary">
+                  Close
+                </button>
+              </div>
+            </div>
+            <textarea
+              readOnly
+              value={decklistText}
+              className="h-[60vh] w-full resize-none rounded-md border border-input bg-background p-3 font-mono text-xs text-foreground outline-none focus:border-primary"
+            />
+          </div>
+        </div>
+      )}
     </section>
   );
 }

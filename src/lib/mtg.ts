@@ -60,10 +60,11 @@ export function cardArt(c: ScryfallCard): string | undefined {
   return c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop;
 }
 
-// Weights for priority-ordered archetypes: first is heaviest.
-// e.g. 3 archetypes -> [3, 2, 1] => 50% / 33% / 17%.
+// Weights for priority-ordered archetypes: first is heaviest, but secondaries
+// still get a meaningful share. Uses a gentler decay so e.g. 3 archetypes
+// split roughly 40% / 33% / 27% instead of 50% / 33% / 17%.
 function priorityWeights(n: number): number[] {
-  const raw = Array.from({ length: n }, (_, i) => n - i);
+  const raw = Array.from({ length: n }, (_, i) => n - i * 0.5);
   const sum = raw.reduce((a, b) => a + b, 0);
   return raw.map((w) => w / sum);
 }
@@ -161,10 +162,17 @@ export async function buildCommanderDeck(opts: {
     voltron: ["equipment", "aura"],
     reanimator: ["graveyard", "return"],
   };
-  // Priority-ordered list of archetype theme words (first archetype first).
+  // Priority-ordered list of archetype theme queries (first archetype first).
+  // Each archetype contributes ALL of its keywords (OR'd) so secondaries
+  // actually pull different cards instead of mirroring the first archetype.
   const archThemes: string[] = opts.archetypes
-    .map((a) => (archKw[a] ?? [])[0])
-    .filter(Boolean) as string[];
+    .map((a) => {
+      const kws = archKw[a] ?? [];
+      if (kws.length === 0) return "";
+      if (kws.length === 1) return `o:${kws[0]}`;
+      return `(${kws.map((k) => `o:${k}`).join(" or ")})`;
+    })
+    .filter(Boolean);
 
   // EDH staples by role with target counts.
   const roles: Array<{ base: string; count: number; themed: boolean }> = [
@@ -209,7 +217,7 @@ export async function buildCommanderDeck(opts: {
     let unfilled = 0;
     for (let i = 0; i < archThemes.length; i++) {
       const want = shares[i] + unfilled;
-      const got = await fillRole(`${role.base} o:${archThemes[i]}`, want);
+      const got = await fillRole(`${role.base} ${archThemes[i]}`, want);
       unfilled = want - got;
     }
     if (unfilled > 0) await fillRole(role.base, unfilled);
