@@ -590,6 +590,12 @@ function DeckView({
           <button onClick={onTweak} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             Tweak parameters
           </button>
+          <button onClick={() => setListOpen(true)} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
+            View decklist
+          </button>
+          <button onClick={copyDecklist} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
+            {listCopied ? "Copied!" : "Copy decklist"}
+          </button>
           <button onClick={download} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             Export .txt
           </button>
