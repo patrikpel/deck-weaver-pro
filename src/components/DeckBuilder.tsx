@@ -155,6 +155,13 @@ export default function DeckBuilder() {
         const cmd = commander ?? chosenCommander;
         if (!cmd) throw new Error("No commander");
         setChosenCommander(cmd);
+        // Sync selected colors to the commander's color identity — a commander
+        // dictates the legal color identity of the deck. If the user picked
+        // colors that don't match, replace them with the commander's identity.
+        const ci = (cmd.color_identity ?? []) as ManaColor[];
+        const sameSet =
+          ci.length === colors.length && ci.every((c) => colors.includes(c));
+        if (!sameSet) setColors(ci);
         const d = await buildCommanderDeck({
           commander: cmd,
           archetypes,
