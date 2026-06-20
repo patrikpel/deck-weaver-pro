@@ -79,6 +79,46 @@ function splitByPriority(total: number, n: number): number[] {
   return parts;
 }
 
+// Free-text search for legendary commanders by name.
+export async function searchCommanders(query: string): Promise<ScryfallCard[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const enc = encodeURIComponent(`is:commander game:paper ${q}`);
+  try {
+    const data = await scry<{ data: ScryfallCard[] }>(
+      `/cards/search?q=${enc}&order=edhrec&unique=cards&page=1`,
+    );
+    return data.data.slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
+// Free-text card search, optionally scoped to a format and color identity.
+export async function searchCards(opts: {
+  query: string;
+  format: Format;
+  colorIdentity?: string; // e.g. "wug" or "" for colorless
+}): Promise<ScryfallCard[]> {
+  const q = opts.query.trim();
+  if (q.length < 2) return [];
+  const parts = [q, "game:paper"];
+  if (opts.format === "commander") parts.push("f:commander");
+  else parts.push(`f:${opts.format}`);
+  if (opts.colorIdentity !== undefined) {
+    parts.push(`id<=${opts.colorIdentity || "c"}`);
+  }
+  const enc = encodeURIComponent(parts.join(" "));
+  try {
+    const data = await scry<{ data: ScryfallCard[] }>(
+      `/cards/search?q=${enc}&order=edhrec&unique=cards&page=1`,
+    );
+    return data.data.slice(0, 24);
+  } catch {
+    return [];
+  }
+}
+
 // Suggest commanders matching the user's choices.
 // Archetypes are priority-ordered: first selected has the biggest impact.
 export async function suggestCommanders(opts: {
