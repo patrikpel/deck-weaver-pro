@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import SaveDeckDialog from "@/components/SaveDeckDialog";
 import {
   ARCHETYPES,
@@ -9,6 +9,8 @@ import {
   cardArt,
   cardImage,
   deckToText,
+  searchCards,
+  searchCommanders,
   suggestCommanders,
   type Format,
   type ManaColor,
@@ -153,6 +155,13 @@ export default function DeckBuilder() {
         const cmd = commander ?? chosenCommander;
         if (!cmd) throw new Error("No commander");
         setChosenCommander(cmd);
+        // Sync selected colors to the commander's color identity — a commander
+        // dictates the legal color identity of the deck. If the user picked
+        // colors that don't match, replace them with the commander's identity.
+        const ci = (cmd.color_identity ?? []) as ManaColor[];
+        const sameSet =
+          ci.length === colors.length && ci.every((c) => colors.includes(c));
+        if (!sameSet) setColors(ci);
         const d = await buildCommanderDeck({
           commander: cmd,
           archetypes,
@@ -363,8 +372,9 @@ export default function DeckBuilder() {
       {step === "commanders" && (
         <Section
           title="Choose your commander"
-          subtitle="Tap one to forge the deck. Not feeling it? Tweak the parameters and try again."
+          subtitle="Tap a suggestion, or search by name. Picking a commander whose color identity differs from your selected colors will replace those colors."
         >
+          <CommanderSearch onPick={(c) => generateDeck(c)} disabled={loading} />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {commanders.map((c) => (
               <button
@@ -387,7 +397,7 @@ export default function DeckBuilder() {
           </div>
           {commanders.length === 0 && !loading && (
             <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
-              No commanders matched. Try different colors or archetypes.
+              No commanders matched. Try different colors or archetypes — or search above.
             </div>
           )}
           <NavRow
@@ -412,6 +422,7 @@ export default function DeckBuilder() {
           archetypes={archetypes}
           onRestart={() => reset("format")}
           onTweak={() => reset("options")}
+          onUpdateDeck={(next) => setDeck(next)}
         />
       )}
 
@@ -515,19 +526,21 @@ function NavRow({ onBack, next }: { onBack?: (() => void) | undefined; next?: Re
 }
 
 function DeckView({
-  deck, format, archetypes, onRestart, onTweak,
+  deck, format, archetypes, onRestart, onTweak, onUpdateDeck,
 }: {
   deck: { commander: ScryfallCard | null; cards: ScryfallCard[] };
   format: Format;
   archetypes: string[];
   onRestart: () => void;
   onTweak: () => void;
+  onUpdateDeck: (next: { commander: ScryfallCard | null; cards: ScryfallCard[] }) => void;
 }) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [listCopied, setListCopied] = useState(false);
+  const [swapOpen, setSwapOpen] = useState(false);
 
   const decklistText = deckToText(deck.commander, deck.cards);
 
@@ -589,6 +602,9 @@ function DeckView({
         <div className="flex flex-wrap gap-2">
           <button onClick={onTweak} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             Tweak parameters
+          </button>
+          <button onClick={() => setSwapOpen(true)} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
+            Swap cards
           </button>
           <button onClick={() => setListOpen(true)} className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary">
             View decklist
@@ -714,6 +730,289 @@ function DeckView({
           </div>
         </div>
       )}
+
+      {swapOpen && (
+        <SwapDialog
+          deck={deck}
+          format={format}
+          onClose={() => setSwapOpen(false)}
+          onApply={(next) => { onUpdateDeck(next); setSwapOpen(false); }}
+        />
+      )}
     </section>
+  );
+}
+
+// ---- Commander search ----------------------------------------------------
+
+function CommanderSearch({
+  onPick, disabled,
+}: { onPick: (c: ScryfallCard) => void; disabled?: boolean }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<ScryfallCard[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      setBusy(true);
+      try { setResults(await searchCommanders(term)); }
+      finally { setBusy(false); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  return (
+    <div className="mb-6 rounded-xl border border-border bg-card p-4">
+      <label className="mb-2 block font-display text-sm uppercase tracking-widest text-foreground">
+        Search commanders
+      </label>
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="e.g. Atraxa, Edgar, Yuriko…"
+        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+      />
+      {busy && <div className="mt-3 text-xs text-muted-foreground">Searching…</div>}
+      {results.length > 0 && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {results.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => onPick(c)}
+              disabled={disabled}
+              className="overflow-hidden rounded-lg border border-border bg-background text-left transition hover:border-primary disabled:opacity-60"
+            >
+              {cardImage(c) ? (
+                <img src={cardImage(c)} alt={c.name} loading="lazy" className="w-full" />
+              ) : (
+                <div className="aspect-[5/7] bg-muted" />
+              )}
+              <div className="p-2">
+                <div className="truncate text-sm font-medium">{c.name}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {(c.color_identity ?? []).join("") || "C"} · {c.type_line}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Swap cards dialog ---------------------------------------------------
+
+function SwapDialog({
+  deck, format, onClose, onApply,
+}: {
+  deck: { commander: ScryfallCard | null; cards: ScryfallCard[] };
+  format: Format;
+  onClose: () => void;
+  onApply: (next: { commander: ScryfallCard | null; cards: ScryfallCard[] }) => void;
+}) {
+  // Deduplicate the current deck for selection (group by name).
+  const grouped = new Map<string, { card: ScryfallCard; ids: string[] }>();
+  for (const c of deck.cards) {
+    const g = grouped.get(c.name);
+    if (g) g.ids.push(c.id);
+    else grouped.set(c.name, { card: c, ids: [c.id] });
+  }
+  const deckEntries = [...grouped.values()].sort((a, b) =>
+    a.card.name.localeCompare(b.card.name),
+  );
+
+  // Selections.
+  const [removeIds, setRemoveIds] = useState<Set<string>>(new Set());
+  const [adds, setAdds] = useState<ScryfallCard[]>([]);
+
+  // Search.
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<ScryfallCard[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const colorIdentity = deck.commander
+    ? (deck.commander.color_identity ?? []).join("").toLowerCase()
+    : undefined;
+
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      setBusy(true);
+      try {
+        setResults(
+          await searchCards({
+            query: term,
+            format,
+            colorIdentity: format === "commander" ? colorIdentity ?? "" : undefined,
+          }),
+        );
+      } finally { setBusy(false); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, format, colorIdentity]);
+
+  function toggleRemove(id: string) {
+    setRemoveIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function addCard(c: ScryfallCard) {
+    setAdds((cur) => [...cur, { ...c, id: `${c.id}-add${cur.length}` }]);
+  }
+  function unAdd(idx: number) {
+    setAdds((cur) => cur.filter((_, i) => i !== idx));
+  }
+
+  const removeCount = removeIds.size;
+  const addCount = adds.length;
+  const canApply = removeCount > 0 && removeCount === addCount;
+
+  function apply() {
+    if (!canApply) return;
+    const remaining = deck.cards.filter((c) => !removeIds.has(c.id));
+    onApply({ commander: deck.commander, cards: [...remaining, ...adds] });
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[90vh] w-full max-w-5xl flex-col gap-3 rounded-xl border border-border bg-card p-5 shadow-arcane"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display text-xl">Swap cards</h3>
+            <p className="text-xs text-muted-foreground">
+              Mark cards to remove on the left, search and add replacements on the right.
+              You can swap one or many at once.
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded-md border border-border px-3 py-1.5 text-xs hover:border-primary">
+            Close
+          </button>
+        </div>
+
+        <div className="grid flex-1 min-h-0 gap-4 sm:grid-cols-2">
+          {/* Remove side */}
+          <div className="flex min-h-0 flex-col rounded-lg border border-border bg-background">
+            <div className="border-b border-border px-3 py-2 text-xs uppercase tracking-widest text-muted-foreground">
+              Deck · remove ({removeCount})
+            </div>
+            <div className="flex-1 overflow-auto p-2">
+              {deckEntries.map(({ card, ids }) => (
+                <div key={card.name} className="mb-1 rounded border border-border/60 p-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="truncate text-sm font-medium">{card.name}</div>
+                    <div className="text-xs text-muted-foreground">×{ids.length}</div>
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">{card.type_line}</div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {ids.map((id, i) => {
+                      const marked = removeIds.has(id);
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => toggleRemove(id)}
+                          className={`rounded px-2 py-0.5 text-[11px] transition ${
+                            marked
+                              ? "bg-destructive text-destructive-foreground"
+                              : "border border-border text-muted-foreground hover:border-primary"
+                          }`}
+                        >
+                          {marked ? `− copy ${i + 1}` : `copy ${i + 1}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Add side */}
+          <div className="flex min-h-0 flex-col rounded-lg border border-border bg-background">
+            <div className="border-b border-border px-3 py-2">
+              <div className="mb-2 text-xs uppercase tracking-widest text-muted-foreground">
+                Search · add ({addCount})
+              </div>
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search card name…"
+                className="w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm outline-none focus:border-primary"
+              />
+            </div>
+            <div className="flex-1 overflow-auto p-2">
+              {adds.length > 0 && (
+                <div className="mb-2 rounded border border-primary/40 bg-primary/5 p-2">
+                  <div className="mb-1 text-xs uppercase tracking-widest text-primary">To add</div>
+                  <div className="flex flex-wrap gap-1">
+                    {adds.map((c, i) => (
+                      <button
+                        key={c.id}
+                        onClick={() => unAdd(i)}
+                        className="rounded bg-primary px-2 py-0.5 text-[11px] text-primary-foreground hover:opacity-80"
+                        title="Click to remove"
+                      >
+                        − {c.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {busy && <div className="text-xs text-muted-foreground">Searching…</div>}
+              {!busy && q.trim().length >= 2 && results.length === 0 && (
+                <div className="text-xs text-muted-foreground">No matches.</div>
+              )}
+              {results.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => addCard(c)}
+                  className="mb-1 flex w-full items-center gap-2 rounded border border-border/60 p-2 text-left transition hover:border-primary"
+                >
+                  {cardArt(c) ? (
+                    <img src={cardArt(c)} alt="" className="h-12 w-12 flex-none rounded object-cover" />
+                  ) : (
+                    <div className="h-12 w-12 flex-none rounded bg-muted" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{c.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">{c.type_line}</div>
+                  </div>
+                  <span className="text-xs text-primary">+ add</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+          <div className="text-xs text-muted-foreground">
+            {removeCount === addCount
+              ? canApply
+                ? `Ready: swap ${removeCount} card${removeCount === 1 ? "" : "s"}.`
+                : "Pick at least one card to remove and one to add."
+              : `Counts must match — remove ${removeCount}, add ${addCount}.`}
+          </div>
+          <button
+            onClick={apply}
+            disabled={!canApply}
+            className="rounded-md bg-gold px-5 py-2 text-sm font-display text-primary-foreground shadow-arcane disabled:opacity-50"
+          >
+            Apply swaps
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
