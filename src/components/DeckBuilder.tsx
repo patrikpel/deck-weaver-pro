@@ -372,8 +372,9 @@ export default function DeckBuilder() {
       {step === "commanders" && (
         <Section
           title="Choose your commander"
-          subtitle="Tap one to forge the deck. Not feeling it? Tweak the parameters and try again."
+          subtitle="Tap a suggestion, or search by name. Picking a commander whose color identity differs from your selected colors will replace those colors."
         >
+          <CommanderSearch onPick={(c) => generateDeck(c)} disabled={loading} />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {commanders.map((c) => (
               <button
@@ -396,7 +397,7 @@ export default function DeckBuilder() {
           </div>
           {commanders.length === 0 && !loading && (
             <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
-              No commanders matched. Try different colors or archetypes.
+              No commanders matched. Try different colors or archetypes — or search above.
             </div>
           )}
           <NavRow
