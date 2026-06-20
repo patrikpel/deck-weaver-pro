@@ -526,6 +526,18 @@ function DeckView({
   const [saveOpen, setSaveOpen] = useState(false);
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  const [listCopied, setListCopied] = useState(false);
+
+  const decklistText = deckToText(deck.commander, deck.cards);
+
+  async function copyDecklist() {
+    try {
+      await navigator.clipboard.writeText(decklistText);
+      setListCopied(true);
+      setTimeout(() => setListCopied(false), 2000);
+    } catch {}
+  }
 
   const total = deck.cards.length + (deck.commander ? 1 : 0);
   const price = deck.cards.reduce((s, c) => s + (parseFloat(c.prices?.usd ?? "0") || 0), 0)
