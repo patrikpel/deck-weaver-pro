@@ -526,19 +526,21 @@ function NavRow({ onBack, next }: { onBack?: (() => void) | undefined; next?: Re
 }
 
 function DeckView({
-  deck, format, archetypes, onRestart, onTweak,
+  deck, format, archetypes, onRestart, onTweak, onUpdateDeck,
 }: {
   deck: { commander: ScryfallCard | null; cards: ScryfallCard[] };
   format: Format;
   archetypes: string[];
   onRestart: () => void;
   onTweak: () => void;
+  onUpdateDeck: (next: { commander: ScryfallCard | null; cards: ScryfallCard[] }) => void;
 }) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [listCopied, setListCopied] = useState(false);
+  const [swapOpen, setSwapOpen] = useState(false);
 
   const decklistText = deckToText(deck.commander, deck.cards);
 
