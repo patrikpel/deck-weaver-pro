@@ -261,7 +261,12 @@ export async function buildCommanderDeck(opts: {
       { q: `(o:"add {" or o:"add one mana" or o:"add two mana")`, count: 8 },
       { q: `t:creature o:"add {"`, count: 4 },
     ],
-    tribal: [{ q: `t:creature (o:"other" o:"creatures you control" or o:"lord")`, count: 6 }],
+    tribal: tribeTok
+      ? [
+          { q: `t:creature t:${tribeTok}`, count: 16 },
+          { q: `t:${tribeTok} (o:"other" o:"creatures you control" or o:"each other")`, count: 4 },
+        ]
+      : [{ q: `t:creature (o:"other" o:"creatures you control" or o:"lord")`, count: 6 }],
     voltron: [
       { q: `t:equipment`, count: 10 },
       { q: `t:aura o:"enchant creature" o:"+"`, count: 4 },
