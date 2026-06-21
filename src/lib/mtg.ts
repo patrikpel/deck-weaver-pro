@@ -190,7 +190,9 @@ export async function buildCommanderDeck(opts: {
   const budgetPer = opts.budget ? Math.max(0.25, opts.budget / 100) : undefined;
   const priceClause = budgetPer ? ` usd<=${budgetPer.toFixed(2)}` : "";
   const power = opts.powerLevel;
+  const idClause = `id<=${ci}${priceClause} f:commander`;
 
+  // Loose, broad theme keywords used for the LAST themed fill pass.
   const archKw: Record<string, string[]> = {
     aggro: ["haste", "attack"],
     control: ["counter", "destroy"],
@@ -202,9 +204,6 @@ export async function buildCommanderDeck(opts: {
     voltron: ["equipment", "aura"],
     reanimator: ["graveyard", "return"],
   };
-  // Priority-ordered list of archetype theme queries (first archetype first).
-  // Each archetype contributes ALL of its keywords (OR'd) so secondaries
-  // actually pull different cards instead of mirroring the first archetype.
   const archThemes: string[] = opts.archetypes
     .map((a) => {
       const kws = archKw[a] ?? [];
@@ -214,13 +213,42 @@ export async function buildCommanderDeck(opts: {
     })
     .filter(Boolean);
 
-  // EDH staples by role with target counts.
-  const roles: Array<{ base: string; count: number; themed: boolean }> = [
-    { base: `id<=${ci} t:creature${priceClause} f:commander`, count: 28, themed: true },
-    { base: `id<=${ci} (t:instant or t:sorcery)${priceClause} f:commander`, count: 14, themed: true },
-    { base: `id<=${ci} t:artifact -t:creature${priceClause} f:commander o:"add"`, count: 10, themed: false },
-    { base: `id<=${ci} t:enchantment -t:creature${priceClause} f:commander`, count: 8, themed: false },
-    { base: `id<=${ci} t:planeswalker${priceClause} f:commander`, count: 2, themed: false },
+  // Strong, narrow archetype "core" queries — each guarantees N on-theme cards
+  // BEFORE generic role filling, so e.g. a voltron deck actually gets equipment.
+  const archCore: Record<string, Array<{ q: string; count: number }>> = {
+    aggro: [{ q: `t:creature o:haste cmc<=3`, count: 8 }],
+    control: [
+      { q: `(t:instant or t:sorcery) o:counter o:spell`, count: 5 },
+      { q: `(t:instant or t:sorcery) o:"destroy target"`, count: 3 },
+    ],
+    midrange: [{ q: `t:creature o:"when" o:"enters"`, count: 6 }],
+    combo: [{ q: `(t:instant or t:sorcery) (o:"search your library" or o:tutor)`, count: 6 }],
+    tokens: [
+      { q: `o:"create" o:"token"`, count: 10 },
+      { q: `o:"creature tokens you control"`, count: 3 },
+    ],
+    ramp: [
+      { q: `(o:"add {" or o:"add one mana" or o:"add two mana")`, count: 8 },
+      { q: `t:creature o:"add {"`, count: 4 },
+    ],
+    tribal: [{ q: `t:creature (o:"other" o:"creatures you control" or o:"lord")`, count: 6 }],
+    voltron: [
+      { q: `t:equipment`, count: 10 },
+      { q: `t:aura o:"enchant creature" o:"+"`, count: 4 },
+      { q: `t:creature (o:double_strike or o:trample or o:"can't be blocked")`, count: 4 },
+    ],
+    reanimator: [
+      { q: `(t:instant or t:sorcery) o:"return" o:"from" o:"graveyard" o:"battlefield"`, count: 6 },
+      { q: `(t:instant or t:sorcery or t:enchantment) (o:"into your graveyard" or o:mill)`, count: 4 },
+    ],
+  };
+
+  // Always-present "necessities" — every commander deck needs these.
+  const necessities: Array<{ name: string; q: string; count: number }> = [
+    { name: "ramp", q: `(o:"add {" or o:"search your library" o:land o:battlefield) -t:land`, count: 10 },
+    { name: "draw", q: `o:"draw" o:"card"`, count: 10 },
+    { name: "single-target removal", q: `(t:instant or t:sorcery) (o:"destroy target" or o:"exile target") (o:creature or o:permanent or o:planeswalker)`, count: 6 },
+    { name: "board wipes", q: `(o:"destroy all" or o:"exile all" or o:"destroy each" or o:"exile each")`, count: 3 },
   ];
 
   const seen = new Set<string>([opts.commander.id, opts.commander.name]);
@@ -248,12 +276,43 @@ export async function buildCommanderDeck(opts: {
     }
   }
 
+  // PASS 1 — Archetype core (guaranteed on-theme cards, priority-weighted).
+  const n = opts.archetypes.length;
+  const priWeights = n ? priorityWeights(n) : [];
+  for (let i = 0; i < opts.archetypes.length; i++) {
+    const core = archCore[opts.archetypes[i]];
+    if (!core) continue;
+    // Secondary archetypes get a smaller share of their core (but never 0).
+    const scale = n > 1 ? Math.max(0.5, priWeights[i] * n) : 1;
+    for (const c of core) {
+      const want = Math.max(1, Math.round(c.count * scale));
+      await fillRole(`${idClause} ${c.q}`, want);
+    }
+  }
+
+  // PASS 2 — Necessities (draw / removal / wipes / ramp guaranteed).
+  for (const need of necessities) {
+    await fillRole(`${idClause} ${need.q}`, need.count);
+  }
+
+  // PASS 3 — Themed role fill for whatever is left, capped at 60 nonland cards.
+  const roles: Array<{ base: string; count: number; themed: boolean }> = [
+    { base: `${idClause} t:creature`, count: 22, themed: true },
+    { base: `${idClause} (t:instant or t:sorcery)`, count: 8, themed: true },
+    { base: `${idClause} t:artifact -t:creature`, count: 4, themed: false },
+    { base: `${idClause} t:enchantment -t:creature`, count: 4, themed: false },
+    { base: `${idClause} t:planeswalker`, count: 1, themed: false },
+  ];
+  const NONLAND_CAP = 63;
   for (const role of roles) {
+    const room = NONLAND_CAP - picked.length;
+    if (room <= 0) break;
+    const target = Math.min(role.count, room);
     if (!role.themed || archThemes.length === 0) {
-      await fillRole(role.base, role.count);
+      await fillRole(role.base, target);
       continue;
     }
-    const shares = splitByPriority(role.count, archThemes.length);
+    const shares = splitByPriority(target, archThemes.length);
     let unfilled = 0;
     for (let i = 0; i < archThemes.length; i++) {
       const want = shares[i] + unfilled;
