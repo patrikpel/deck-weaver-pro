@@ -235,6 +235,7 @@ export async function buildCommanderDeck(opts: {
   };
   const archThemes: string[] = opts.archetypes
     .map((a) => {
+      if (a === "tribal" && tribeTok) return `t:${tribeTok}`;
       const kws = archKw[a] ?? [];
       if (kws.length === 0) return "";
       if (kws.length === 1) return `o:${kws[0]}`;
