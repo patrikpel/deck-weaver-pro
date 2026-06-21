@@ -141,6 +141,7 @@ export default function DeckBuilder() {
       const cs = await suggestCommanders({
         colors,
         archetypes,
+        tribe: tribe.trim() || undefined,
         budget: typeof budget === "number" ? budget : undefined,
       });
       setCommanders(cs);
@@ -167,6 +168,7 @@ export default function DeckBuilder() {
         const d = await buildCommanderDeck({
           commander: cmd,
           archetypes,
+          tribe: tribe.trim() || undefined,
           budget: typeof budget === "number" ? budget : undefined,
           powerLevel: BRACKETS.find((b) => b.id === bracket)?.power ?? 6,
         });
@@ -176,6 +178,7 @@ export default function DeckBuilder() {
           format,
           colors,
           archetypes,
+          tribe: tribe.trim() || undefined,
           budget: typeof budget === "number" ? budget : undefined,
         });
         setDeck(d);
