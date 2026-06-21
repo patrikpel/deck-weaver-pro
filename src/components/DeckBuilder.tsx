@@ -46,6 +46,7 @@ export default function DeckBuilder() {
   const [furthestStepIndex, setFurthestStepIndex] = useState(0);
   const [format, setFormat] = useState<Format>("commander");
   const [archetypes, setArchetypes] = useState<string[]>([]);
+  const [tribe, setTribe] = useState<string>("");
   const [colors, setColors] = useState<ManaColor[]>([]);
   const [budget, setBudget] = useState<number | "">("");
   const [bracket, setBracket] = useState<number>(2);
@@ -76,6 +77,7 @@ export default function DeckBuilder() {
   function clearDownstream(fromStep: Step) {
     if (fromStep === "format") {
       setArchetypes([]);
+      setTribe("");
       setColors([]);
       setBudget("");
       setBracket(2);
@@ -139,6 +141,7 @@ export default function DeckBuilder() {
       const cs = await suggestCommanders({
         colors,
         archetypes,
+        tribe: tribe.trim() || undefined,
         budget: typeof budget === "number" ? budget : undefined,
       });
       setCommanders(cs);
@@ -165,6 +168,7 @@ export default function DeckBuilder() {
         const d = await buildCommanderDeck({
           commander: cmd,
           archetypes,
+          tribe: tribe.trim() || undefined,
           budget: typeof budget === "number" ? budget : undefined,
           powerLevel: BRACKETS.find((b) => b.id === bracket)?.power ?? 6,
         });
@@ -174,6 +178,7 @@ export default function DeckBuilder() {
           format,
           colors,
           archetypes,
+          tribe: tribe.trim() || undefined,
           budget: typeof budget === "number" ? budget : undefined,
         });
         setDeck(d);
@@ -271,6 +276,29 @@ export default function DeckBuilder() {
               );
             })}
           </div>
+          {archetypes.includes("tribal") && (
+            <div className="mt-4 rounded-lg border border-primary/40 bg-card p-4">
+              <label htmlFor="tribe" className="block font-display text-sm">
+                Which tribe?
+              </label>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Type a creature type — e.g. Elf, Goblin, Zombie, Dragon, Merfolk, Vampire.
+              </div>
+              <input
+                id="tribe"
+                value={tribe}
+                onChange={(e) => {
+                  setTribe(e.target.value);
+                  if (step === "archetype") {
+                    invalidateFrom("archetype");
+                    clearDownstream("archetype");
+                  }
+                }}
+                placeholder="Elf"
+                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+            </div>
+          )}
           <NavRow
             onBack={() => goToStep("format")}
             next={

@@ -124,6 +124,7 @@ export async function searchCards(opts: {
 export async function suggestCommanders(opts: {
   colors: ManaColor[];
   archetypes: string[];
+  tribe?: string;
   budget?: number;
 }): Promise<ScryfallCard[]> {
   const baseParts = ["is:commander", "game:paper"];
@@ -131,6 +132,7 @@ export async function suggestCommanders(opts: {
     baseParts.push(`id:${opts.colors.join("").toLowerCase() || "c"}`);
   }
   if (opts.budget) baseParts.push(`usd<=${Math.max(1, Math.floor(opts.budget / 20))}`);
+  const tribeTok = sanitizeTribe(opts.tribe);
   // Loosely tie archetype to a keyword for commander discovery.
   const archKeyword: Record<string, string> = {
     aggro: "haste",
@@ -139,27 +141,33 @@ export async function suggestCommanders(opts: {
     combo: "infinite",
     tokens: "token",
     ramp: "ramp",
-    tribal: "tribal",
+    tribal: "",
     voltron: "equipment",
     reanimator: "graveyard",
   };
-  const kws = opts.archetypes.map((a) => archKeyword[a]).filter(Boolean);
-  // Query per priority and merge; first archetype contributes most.
+  // For tribal with a tribe, override with `t:<tribe>` so we get commanders
+  // that ARE the tribe (e.g. an Elf commander for an Elf deck).
+  const archClause = (a: string): string => {
+    if (a === "tribal") return tribeTok ? `t:${tribeTok}` : "";
+    const kw = archKeyword[a];
+    return kw ? `o:${kw}` : "";
+  };
+  const clauses = opts.archetypes.map(archClause).filter(Boolean);
   const TOTAL = 9;
-  if (kws.length === 0) {
+  if (clauses.length === 0) {
     const q = encodeURIComponent(baseParts.join(" "));
     const data = await scry<{ data: ScryfallCard[] }>(
       `/cards/search?q=${q}&order=edhrec&unique=cards&page=1`,
     );
     return data.data.slice(0, TOTAL);
   }
-  const shares = splitByPriority(TOTAL, kws.length);
+  const shares = splitByPriority(TOTAL, clauses.length);
   const seen = new Set<string>();
   const out: ScryfallCard[] = [];
-  for (let i = 0; i < kws.length; i++) {
+  for (let i = 0; i < clauses.length; i++) {
     const want = shares[i];
     if (want <= 0) continue;
-    const parts = [...baseParts, `o:${kws[i]}`];
+    const parts = [...baseParts, clauses[i]];
     const q = encodeURIComponent(parts.join(" "));
     try {
       const data = await scry<{ data: ScryfallCard[] }>(
@@ -178,14 +186,35 @@ export async function suggestCommanders(opts: {
   return out.slice(0, TOTAL);
 }
 
+// Normalize a free-text tribe input into a Scryfall-safe type token.
+// Accepts "Elves", "elf", "Goblin Warrior" → quoted multi-word as needed.
+function sanitizeTribe(input?: string): string {
+  if (!input) return "";
+  const t = input.trim().toLowerCase().replace(/[^a-z\s-]/g, "");
+  if (!t) return "";
+  // Naive singularize for common plurals.
+  const singular = t
+    .split(/\s+/)
+    .map((w) =>
+      w.endsWith("ies") ? w.slice(0, -3) + "y" :
+      w.endsWith("ves") ? w.slice(0, -3) + "f" :
+      w.endsWith("s") && w.length > 3 ? w.slice(0, -1) : w
+    )
+    .join(" ");
+  return singular.includes(" ") ? `"${singular}"` : singular;
+}
+
+
 
 // Build a Commander (100-card) decklist using Scryfall searches per role.
 export async function buildCommanderDeck(opts: {
   commander: ScryfallCard;
   archetypes: string[];
+  tribe?: string;
   budget?: number;
   powerLevel: number; // 1-10
 }): Promise<{ commander: ScryfallCard; cards: ScryfallCard[] }> {
+  const tribeTok = sanitizeTribe(opts.tribe);
   const ci = (opts.commander.color_identity ?? []).join("").toLowerCase() || "c";
   const budgetPer = opts.budget ? Math.max(0.25, opts.budget / 100) : undefined;
   const priceClause = budgetPer ? ` usd<=${budgetPer.toFixed(2)}` : "";
@@ -206,6 +235,7 @@ export async function buildCommanderDeck(opts: {
   };
   const archThemes: string[] = opts.archetypes
     .map((a) => {
+      if (a === "tribal" && tribeTok) return `t:${tribeTok}`;
       const kws = archKw[a] ?? [];
       if (kws.length === 0) return "";
       if (kws.length === 1) return `o:${kws[0]}`;
@@ -231,7 +261,12 @@ export async function buildCommanderDeck(opts: {
       { q: `(o:"add {" or o:"add one mana" or o:"add two mana")`, count: 8 },
       { q: `t:creature o:"add {"`, count: 4 },
     ],
-    tribal: [{ q: `t:creature (o:"other" o:"creatures you control" or o:"lord")`, count: 6 }],
+    tribal: tribeTok
+      ? [
+          { q: `t:creature t:${tribeTok}`, count: 16 },
+          { q: `t:${tribeTok} (o:"other" o:"creatures you control" or o:"each other")`, count: 4 },
+        ]
+      : [{ q: `t:creature (o:"other" o:"creatures you control" or o:"lord")`, count: 6 }],
     voltron: [
       { q: `t:equipment`, count: 10 },
       { q: `t:aura o:"enchant creature" o:"+"`, count: 4 },
@@ -355,19 +390,28 @@ export async function buildConstructedDeck(opts: {
   format: Format;
   colors: ManaColor[];
   archetypes: string[];
+  tribe?: string;
   budget?: number;
 }): Promise<{ commander: null; cards: ScryfallCard[] }> {
   const ci = opts.colors.join("").toLowerCase() || "c";
   const budgetPer = opts.budget ? Math.max(0.25, opts.budget / 60) : undefined;
   const priceClause = budgetPer ? ` usd<=${budgetPer.toFixed(2)}` : "";
   const fmt = `f:${opts.format}`;
+  const tribeTok = sanitizeTribe(opts.tribe);
 
   const archKw: Record<string, string> = {
     aggro: "haste", control: "counter", midrange: "", combo: "search",
     tokens: "token", ramp: "ramp", tribal: "creature", voltron: "equipment",
     reanimator: "graveyard",
   };
-  const kws = opts.archetypes.map((a) => archKw[a]).filter(Boolean) as string[];
+  // For tribal with a tribe, use `t:<tribe>` instead of an oracle keyword.
+  const themeClauses: string[] = opts.archetypes
+    .map((a) => {
+      if (a === "tribal" && tribeTok) return `t:${tribeTok}`;
+      const kw = archKw[a];
+      return kw ? `o:${kw}` : "";
+    })
+    .filter(Boolean);
 
   const roles: Array<{ base: string; count: number; themed: boolean }> = [
     { base: `${fmt} id<=${ci} t:creature${priceClause}`, count: 20, themed: true },
@@ -403,15 +447,15 @@ export async function buildConstructedDeck(opts: {
   }
 
   for (const role of roles) {
-    if (!role.themed || kws.length === 0) {
+    if (!role.themed || themeClauses.length === 0) {
       await fillRole(role.base, role.count);
       continue;
     }
-    const shares = splitByPriority(role.count, kws.length);
+    const shares = splitByPriority(role.count, themeClauses.length);
     let unfilled = 0;
-    for (let i = 0; i < kws.length; i++) {
+    for (let i = 0; i < themeClauses.length; i++) {
       const want = shares[i] + unfilled;
-      const got = await fillRole(`${role.base} o:${kws[i]}`, want);
+      const got = await fillRole(`${role.base} ${themeClauses[i]}`, want);
       unfilled = want - got;
     }
     if (unfilled > 0) await fillRole(role.base, unfilled);
