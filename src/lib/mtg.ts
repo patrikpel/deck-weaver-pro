@@ -447,15 +447,15 @@ export async function buildConstructedDeck(opts: {
   }
 
   for (const role of roles) {
-    if (!role.themed || kws.length === 0) {
+    if (!role.themed || themeClauses.length === 0) {
       await fillRole(role.base, role.count);
       continue;
     }
-    const shares = splitByPriority(role.count, kws.length);
+    const shares = splitByPriority(role.count, themeClauses.length);
     let unfilled = 0;
-    for (let i = 0; i < kws.length; i++) {
+    for (let i = 0; i < themeClauses.length; i++) {
       const want = shares[i] + unfilled;
-      const got = await fillRole(`${role.base} o:${kws[i]}`, want);
+      const got = await fillRole(`${role.base} ${themeClauses[i]}`, want);
       unfilled = want - got;
     }
     if (unfilled > 0) await fillRole(role.base, unfilled);
