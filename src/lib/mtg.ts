@@ -210,9 +210,11 @@ function sanitizeTribe(input?: string): string {
 export async function buildCommanderDeck(opts: {
   commander: ScryfallCard;
   archetypes: string[];
+  tribe?: string;
   budget?: number;
   powerLevel: number; // 1-10
 }): Promise<{ commander: ScryfallCard; cards: ScryfallCard[] }> {
+  const tribeTok = sanitizeTribe(opts.tribe);
   const ci = (opts.commander.color_identity ?? []).join("").toLowerCase() || "c";
   const budgetPer = opts.budget ? Math.max(0.25, opts.budget / 100) : undefined;
   const priceClause = budgetPer ? ` usd<=${budgetPer.toFixed(2)}` : "";
