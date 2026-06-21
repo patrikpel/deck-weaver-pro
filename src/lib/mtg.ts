@@ -390,19 +390,28 @@ export async function buildConstructedDeck(opts: {
   format: Format;
   colors: ManaColor[];
   archetypes: string[];
+  tribe?: string;
   budget?: number;
 }): Promise<{ commander: null; cards: ScryfallCard[] }> {
   const ci = opts.colors.join("").toLowerCase() || "c";
   const budgetPer = opts.budget ? Math.max(0.25, opts.budget / 60) : undefined;
   const priceClause = budgetPer ? ` usd<=${budgetPer.toFixed(2)}` : "";
   const fmt = `f:${opts.format}`;
+  const tribeTok = sanitizeTribe(opts.tribe);
 
   const archKw: Record<string, string> = {
     aggro: "haste", control: "counter", midrange: "", combo: "search",
     tokens: "token", ramp: "ramp", tribal: "creature", voltron: "equipment",
     reanimator: "graveyard",
   };
-  const kws = opts.archetypes.map((a) => archKw[a]).filter(Boolean) as string[];
+  // For tribal with a tribe, use `t:<tribe>` instead of an oracle keyword.
+  const themeClauses: string[] = opts.archetypes
+    .map((a) => {
+      if (a === "tribal" && tribeTok) return `t:${tribeTok}`;
+      const kw = archKw[a];
+      return kw ? `o:${kw}` : "";
+    })
+    .filter(Boolean);
 
   const roles: Array<{ base: string; count: number; themed: boolean }> = [
     { base: `${fmt} id<=${ci} t:creature${priceClause}`, count: 20, themed: true },
