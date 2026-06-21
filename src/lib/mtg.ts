@@ -124,6 +124,7 @@ export async function searchCards(opts: {
 export async function suggestCommanders(opts: {
   colors: ManaColor[];
   archetypes: string[];
+  tribe?: string;
   budget?: number;
 }): Promise<ScryfallCard[]> {
   const baseParts = ["is:commander", "game:paper"];
@@ -131,6 +132,7 @@ export async function suggestCommanders(opts: {
     baseParts.push(`id:${opts.colors.join("").toLowerCase() || "c"}`);
   }
   if (opts.budget) baseParts.push(`usd<=${Math.max(1, Math.floor(opts.budget / 20))}`);
+  const tribeTok = sanitizeTribe(opts.tribe);
   // Loosely tie archetype to a keyword for commander discovery.
   const archKeyword: Record<string, string> = {
     aggro: "haste",
@@ -139,27 +141,33 @@ export async function suggestCommanders(opts: {
     combo: "infinite",
     tokens: "token",
     ramp: "ramp",
-    tribal: "tribal",
+    tribal: "",
     voltron: "equipment",
     reanimator: "graveyard",
   };
-  const kws = opts.archetypes.map((a) => archKeyword[a]).filter(Boolean);
-  // Query per priority and merge; first archetype contributes most.
+  // For tribal with a tribe, override with `t:<tribe>` so we get commanders
+  // that ARE the tribe (e.g. an Elf commander for an Elf deck).
+  const archClause = (a: string): string => {
+    if (a === "tribal") return tribeTok ? `t:${tribeTok}` : "";
+    const kw = archKeyword[a];
+    return kw ? `o:${kw}` : "";
+  };
+  const clauses = opts.archetypes.map(archClause).filter(Boolean);
   const TOTAL = 9;
-  if (kws.length === 0) {
+  if (clauses.length === 0) {
     const q = encodeURIComponent(baseParts.join(" "));
     const data = await scry<{ data: ScryfallCard[] }>(
       `/cards/search?q=${q}&order=edhrec&unique=cards&page=1`,
     );
     return data.data.slice(0, TOTAL);
   }
-  const shares = splitByPriority(TOTAL, kws.length);
+  const shares = splitByPriority(TOTAL, clauses.length);
   const seen = new Set<string>();
   const out: ScryfallCard[] = [];
-  for (let i = 0; i < kws.length; i++) {
+  for (let i = 0; i < clauses.length; i++) {
     const want = shares[i];
     if (want <= 0) continue;
-    const parts = [...baseParts, `o:${kws[i]}`];
+    const parts = [...baseParts, clauses[i]];
     const q = encodeURIComponent(parts.join(" "));
     try {
       const data = await scry<{ data: ScryfallCard[] }>(
@@ -177,6 +185,25 @@ export async function suggestCommanders(opts: {
   }
   return out.slice(0, TOTAL);
 }
+
+// Normalize a free-text tribe input into a Scryfall-safe type token.
+// Accepts "Elves", "elf", "Goblin Warrior" → quoted multi-word as needed.
+function sanitizeTribe(input?: string): string {
+  if (!input) return "";
+  const t = input.trim().toLowerCase().replace(/[^a-z\s-]/g, "");
+  if (!t) return "";
+  // Naive singularize for common plurals.
+  const singular = t
+    .split(/\s+/)
+    .map((w) =>
+      w.endsWith("ies") ? w.slice(0, -3) + "y" :
+      w.endsWith("ves") ? w.slice(0, -3) + "f" :
+      w.endsWith("s") && w.length > 3 ? w.slice(0, -1) : w
+    )
+    .join(" ");
+  return singular.includes(" ") ? `"${singular}"` : singular;
+}
+
 
 
 // Build a Commander (100-card) decklist using Scryfall searches per role.
