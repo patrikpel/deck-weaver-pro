@@ -77,6 +77,7 @@ export default function DeckBuilder() {
   function clearDownstream(fromStep: Step) {
     if (fromStep === "format") {
       setArchetypes([]);
+      setTribe("");
       setColors([]);
       setBudget("");
       setBracket(2);
