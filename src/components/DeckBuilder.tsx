@@ -46,6 +46,7 @@ export default function DeckBuilder() {
   const [furthestStepIndex, setFurthestStepIndex] = useState(0);
   const [format, setFormat] = useState<Format>("commander");
   const [archetypes, setArchetypes] = useState<string[]>([]);
+  const [tribe, setTribe] = useState<string>("");
   const [colors, setColors] = useState<ManaColor[]>([]);
   const [budget, setBudget] = useState<number | "">("");
   const [bracket, setBracket] = useState<number>(2);
