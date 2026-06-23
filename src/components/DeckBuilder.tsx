@@ -690,6 +690,21 @@ function DeckView({
             <h3 className="mt-1 font-display text-2xl">{deck.commander.name}</h3>
             <div className="text-sm text-muted-foreground">{deck.commander.type_line}</div>
             <p className="mt-3 whitespace-pre-line text-sm text-foreground/90">{deck.commander.oracle_text}</p>
+            {deck.synergies && deck.synergies.length > 0 && (
+              <div className="mt-4">
+                <div className="text-xs uppercase tracking-widest text-muted-foreground">Synergies detected</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {deck.synergies.map((s) => (
+                    <span
+                      key={s.id}
+                      className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs text-primary"
+                    >
+                      {s.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
