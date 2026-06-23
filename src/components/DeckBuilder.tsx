@@ -58,7 +58,12 @@ export default function DeckBuilder() {
   const [error, setError] = useState<string | null>(null);
   const [commanders, setCommanders] = useState<ScryfallCard[]>([]);
   const [chosenCommander, setChosenCommander] = useState<ScryfallCard | null>(null);
-  const [deck, setDeck] = useState<{ commander: ScryfallCard | null; cards: ScryfallCard[]; synergies?: CommanderSynergy[] } | null>(null);
+  // Partner-picker substate (lives inside the "commanders" step).
+  const [pendingCommander, setPendingCommander] = useState<ScryfallCard | null>(null);
+  const [partnerInfo, setPartnerInfo] = useState<PartnerInfo | null>(null);
+  const [partnerOptions, setPartnerOptions] = useState<ScryfallCard[]>([]);
+  const [partnerLoading, setPartnerLoading] = useState(false);
+  const [deck, setDeck] = useState<{ commander: ScryfallCard | null; partner: ScryfallCard | null; cards: ScryfallCard[]; synergies?: CommanderSynergy[] } | null>(null);
 
   const currentIdx = stepIndex(step, format);
 
