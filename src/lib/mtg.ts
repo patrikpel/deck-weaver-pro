@@ -400,7 +400,7 @@ export async function buildCommanderDeck(opts: {
   tribe?: string;
   budget?: number;
   powerLevel: number; // 1-10
-}): Promise<{ commander: ScryfallCard; cards: ScryfallCard[] }> {
+}): Promise<{ commander: ScryfallCard; cards: ScryfallCard[]; synergies: CommanderSynergy[] }> {
   const tribeTok = sanitizeTribe(opts.tribe);
   const ci = (opts.commander.color_identity ?? []).join("").toLowerCase() || "c";
   const budgetPer = opts.budget ? Math.max(0.25, opts.budget / 100) : undefined;
