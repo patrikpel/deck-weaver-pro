@@ -640,9 +640,10 @@ function DeckView({
     } catch {}
   }
 
-  const total = deck.cards.length + (deck.commander ? 1 : 0);
+  const total = deck.cards.length + (deck.commander ? 1 : 0) + (deck.partner ? 1 : 0);
   const price = deck.cards.reduce((s, c) => s + (parseFloat(c.prices?.usd ?? "0") || 0), 0)
-    + (deck.commander ? parseFloat(deck.commander.prices?.usd ?? "0") || 0 : 0);
+    + (deck.commander ? parseFloat(deck.commander.prices?.usd ?? "0") || 0 : 0)
+    + (deck.partner ? parseFloat(deck.partner.prices?.usd ?? "0") || 0 : 0);
 
   // Group + dedupe for display
   const grouped = new Map<string, { card: ScryfallCard; count: number }>();
