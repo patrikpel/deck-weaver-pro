@@ -816,7 +816,7 @@ function DeckView({
         format={format}
         archetypes={archetypes}
         commander={deck.commander}
-        cards={deck.cards}
+        cards={deck.partner ? [deck.partner, ...deck.cards] : deck.cards}
         onSaved={(code) => { setShareCode(code); setSaveOpen(false); }}
       />
 
