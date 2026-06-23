@@ -650,7 +650,7 @@ export async function buildCommanderDeck(opts: {
     { base: `${idClause} t:enchantment -t:creature`, count: 4, themed: false },
     { base: `${idClause} t:planeswalker`, count: 1, themed: false },
   ];
-  const NONLAND_CAP = 63;
+  const NONLAND_CAP = nonlandTarget;
   for (const role of roles) {
     const room = NONLAND_CAP - picked.length;
     if (room <= 0) break;
