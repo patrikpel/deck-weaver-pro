@@ -769,6 +769,20 @@ function DeckView({
         </div>
       )}
 
+      {deck.partner && (
+        <div className="flex flex-col gap-6 rounded-2xl border border-primary/40 bg-card p-6 shadow-arcane sm:flex-row">
+          {cardImage(deck.partner) && (
+            <img src={cardImage(deck.partner)} alt={deck.partner.name} className="w-48 rounded-lg shadow-card-elev" />
+          )}
+          <div className="flex-1">
+            <div className="text-xs uppercase tracking-widest text-primary">Partner / Background</div>
+            <h3 className="mt-1 font-display text-2xl">{deck.partner.name}</h3>
+            <div className="text-sm text-muted-foreground">{deck.partner.type_line}</div>
+            <p className="mt-3 whitespace-pre-line text-sm text-foreground/90">{deck.partner.oracle_text}</p>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {groupedList.map(({ card, count }) => (
           <a
