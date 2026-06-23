@@ -675,7 +675,7 @@ export async function buildCommanderDeck(opts: {
     w: "Plains", u: "Island", b: "Swamp", r: "Mountain", g: "Forest",
   };
   const colors = ci === "c" ? [] : ci.split("");
-  const remainder = Math.max(0, 99 - picked.length);
+  const remainder = Math.max(0, finalCardCap - picked.length);
   if (colors.length === 0) {
     // colorless: wastes
     try {
