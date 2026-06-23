@@ -160,22 +160,59 @@ export default function DeckBuilder() {
     } finally { setLoading(false); }
   }
 
-  async function generateDeck(commander?: ScryfallCard) {
+  // When a commander suggestion is clicked: detect partner mechanics.
+  // If commander has Partner / Friends forever / Choose a Background / etc.,
+  // fetch valid partner candidates and let the player pick (or skip).
+  async function pickCommander(commander: ScryfallCard) {
+    if (format !== "commander") {
+      await generateDeck(commander);
+      return;
+    }
+    const info = detectPartner(commander);
+    if (!info) {
+      await generateDeck(commander);
+      return;
+    }
+    setPendingCommander(commander);
+    setPartnerInfo(info);
+    setPartnerOptions([]);
+    setPartnerLoading(true);
+    setError(null);
+    try {
+      const res = await findPartnerCandidates(commander);
+      setPartnerOptions(res?.options ?? []);
+    } catch {
+      setError("Couldn't load partner options.");
+    } finally {
+      setPartnerLoading(false);
+    }
+  }
+
+  function cancelPartner() {
+    setPendingCommander(null);
+    setPartnerInfo(null);
+    setPartnerOptions([]);
+  }
+
+  async function generateDeck(commander?: ScryfallCard, partner?: ScryfallCard | null) {
     setLoading(true); setError(null);
     try {
       if (format === "commander") {
-        const cmd = commander ?? chosenCommander;
+        const cmd = commander ?? pendingCommander ?? chosenCommander;
         if (!cmd) throw new Error("No commander");
         setChosenCommander(cmd);
-        // Sync selected colors to the commander's color identity — a commander
-        // dictates the legal color identity of the deck. If the user picked
-        // colors that don't match, replace them with the commander's identity.
-        const ci = (cmd.color_identity ?? []) as ManaColor[];
+        // Sync selected colors to the commander's color identity (union with partner).
+        const ciSet = new Set<string>([
+          ...(cmd.color_identity ?? []),
+          ...(partner?.color_identity ?? []),
+        ]);
+        const ci = [...ciSet] as ManaColor[];
         const sameSet =
           ci.length === colors.length && ci.every((c) => colors.includes(c));
         if (!sameSet) setColors(ci);
         const d = await buildCommanderDeck({
           commander: cmd,
+          partner: partner ?? null,
           archetypes,
           tribe: tribe.trim() || undefined,
           budget: typeof budget === "number" ? budget : undefined,
@@ -190,8 +227,9 @@ export default function DeckBuilder() {
           tribe: tribe.trim() || undefined,
           budget: typeof budget === "number" ? budget : undefined,
         });
-        setDeck(d);
+        setDeck({ ...d, partner: null });
       }
+      cancelPartner();
       advanceTo("deck");
     } catch (e) {
       setError("Deck build failed. Try different parameters.");
@@ -203,6 +241,7 @@ export default function DeckBuilder() {
     setDeck(null);
     setChosenCommander(null);
     setCommanders([]);
+    cancelPartner();
     if (toStep === "format") {
       setArchetypes([]); setColors([]); setBudget(""); setBracket(2);
       setFurthestStepIndex(0);
