@@ -512,6 +512,23 @@ export async function buildCommanderDeck(opts: {
     }
   }
 
+  // PASS 1b — Commander synergy (driven by commander's oracle text).
+  const synergies = extractCommanderSynergies(opts.commander);
+  if (synergies.length > 0) {
+    const SYN_BUDGET = 22; // total slots reserved across synergies
+    const weightSum = synergies.reduce((a, s) => a + s.weight, 0);
+    for (const syn of synergies) {
+      const slotsForSyn = Math.max(2, Math.round((syn.weight / weightSum) * SYN_BUDGET));
+      const perQuery = Math.max(1, Math.ceil(slotsForSyn / syn.queries.length));
+      for (const q of syn.queries) {
+        if (picked.length >= 63) break;
+        await fillRole(`${idClause} ${q}`, perQuery);
+      }
+    }
+  }
+
+
+
   // PASS 2 — Necessities (draw / removal / wipes / ramp guaranteed).
   for (const need of necessities) {
     await fillRole(`${idClause} ${need.q}`, need.count);
