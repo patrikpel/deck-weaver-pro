@@ -510,7 +510,7 @@ export default function DeckBuilder() {
           archetypes={archetypes}
           onRestart={() => reset("format")}
           onTweak={() => reset("options")}
-          onUpdateDeck={(next) => setDeck({ ...next, synergies: deck.synergies })}
+          onUpdateDeck={(next) => setDeck({ ...next, partner: deck.partner, synergies: deck.synergies })}
         />
       )}
 
