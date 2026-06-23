@@ -445,17 +445,17 @@ export default function DeckBuilder() {
         </Section>
       )}
 
-      {step === "commanders" && (
+      {step === "commanders" && !pendingCommander && (
         <Section
           title="Choose your commander"
           subtitle="Tap a suggestion, or search by name. Picking a commander whose color identity differs from your selected colors will replace those colors."
         >
-          <CommanderSearch onPick={(c) => generateDeck(c)} disabled={loading} />
+          <CommanderSearch onPick={(c) => pickCommander(c)} disabled={loading} />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {commanders.map((c) => (
               <button
                 key={c.id}
-                onClick={() => generateDeck(c)}
+                onClick={() => pickCommander(c)}
                 disabled={loading}
                 className="group overflow-hidden rounded-xl border border-border bg-card text-left transition hover:border-primary hover:shadow-arcane disabled:opacity-60"
               >
@@ -491,6 +491,18 @@ export default function DeckBuilder() {
         </Section>
       )}
 
+      {step === "commanders" && pendingCommander && partnerInfo && (
+        <PartnerPicker
+          commander={pendingCommander}
+          info={partnerInfo}
+          options={partnerOptions}
+          loading={partnerLoading || loading}
+          onSkip={() => generateDeck(pendingCommander, null)}
+          onPick={(p) => generateDeck(pendingCommander!, p)}
+          onCancel={cancelPartner}
+        />
+      )}
+
       {step === "deck" && deck && (
         <DeckView
           deck={deck}
@@ -498,7 +510,7 @@ export default function DeckBuilder() {
           archetypes={archetypes}
           onRestart={() => reset("format")}
           onTweak={() => reset("options")}
-          onUpdateDeck={(next) => setDeck(next)}
+          onUpdateDeck={(next) => setDeck({ ...next, synergies: deck.synergies })}
         />
       )}
 
