@@ -9,11 +9,14 @@ import {
   cardArt,
   cardImage,
   deckToText,
+  detectPartner,
+  findPartnerCandidates,
   searchCards,
   searchCommanders,
   suggestCommanders,
   type Format,
   type ManaColor,
+  type PartnerInfo,
   type ScryfallCard,
   type CommanderSynergy,
 } from "@/lib/mtg";
@@ -55,7 +58,12 @@ export default function DeckBuilder() {
   const [error, setError] = useState<string | null>(null);
   const [commanders, setCommanders] = useState<ScryfallCard[]>([]);
   const [chosenCommander, setChosenCommander] = useState<ScryfallCard | null>(null);
-  const [deck, setDeck] = useState<{ commander: ScryfallCard | null; cards: ScryfallCard[]; synergies?: CommanderSynergy[] } | null>(null);
+  // Partner-picker substate (lives inside the "commanders" step).
+  const [pendingCommander, setPendingCommander] = useState<ScryfallCard | null>(null);
+  const [partnerInfo, setPartnerInfo] = useState<PartnerInfo | null>(null);
+  const [partnerOptions, setPartnerOptions] = useState<ScryfallCard[]>([]);
+  const [partnerLoading, setPartnerLoading] = useState(false);
+  const [deck, setDeck] = useState<{ commander: ScryfallCard | null; partner: ScryfallCard | null; cards: ScryfallCard[]; synergies?: CommanderSynergy[] } | null>(null);
 
   const currentIdx = stepIndex(step, format);
 
@@ -152,22 +160,59 @@ export default function DeckBuilder() {
     } finally { setLoading(false); }
   }
 
-  async function generateDeck(commander?: ScryfallCard) {
+  // When a commander suggestion is clicked: detect partner mechanics.
+  // If commander has Partner / Friends forever / Choose a Background / etc.,
+  // fetch valid partner candidates and let the player pick (or skip).
+  async function pickCommander(commander: ScryfallCard) {
+    if (format !== "commander") {
+      await generateDeck(commander);
+      return;
+    }
+    const info = detectPartner(commander);
+    if (!info) {
+      await generateDeck(commander);
+      return;
+    }
+    setPendingCommander(commander);
+    setPartnerInfo(info);
+    setPartnerOptions([]);
+    setPartnerLoading(true);
+    setError(null);
+    try {
+      const res = await findPartnerCandidates(commander);
+      setPartnerOptions(res?.options ?? []);
+    } catch {
+      setError("Couldn't load partner options.");
+    } finally {
+      setPartnerLoading(false);
+    }
+  }
+
+  function cancelPartner() {
+    setPendingCommander(null);
+    setPartnerInfo(null);
+    setPartnerOptions([]);
+  }
+
+  async function generateDeck(commander?: ScryfallCard, partner?: ScryfallCard | null) {
     setLoading(true); setError(null);
     try {
       if (format === "commander") {
-        const cmd = commander ?? chosenCommander;
+        const cmd = commander ?? pendingCommander ?? chosenCommander;
         if (!cmd) throw new Error("No commander");
         setChosenCommander(cmd);
-        // Sync selected colors to the commander's color identity — a commander
-        // dictates the legal color identity of the deck. If the user picked
-        // colors that don't match, replace them with the commander's identity.
-        const ci = (cmd.color_identity ?? []) as ManaColor[];
+        // Sync selected colors to the commander's color identity (union with partner).
+        const ciSet = new Set<string>([
+          ...(cmd.color_identity ?? []),
+          ...(partner?.color_identity ?? []),
+        ]);
+        const ci = [...ciSet] as ManaColor[];
         const sameSet =
           ci.length === colors.length && ci.every((c) => colors.includes(c));
         if (!sameSet) setColors(ci);
         const d = await buildCommanderDeck({
           commander: cmd,
+          partner: partner ?? null,
           archetypes,
           tribe: tribe.trim() || undefined,
           budget: typeof budget === "number" ? budget : undefined,
@@ -182,8 +227,9 @@ export default function DeckBuilder() {
           tribe: tribe.trim() || undefined,
           budget: typeof budget === "number" ? budget : undefined,
         });
-        setDeck(d);
+        setDeck({ ...d, partner: null });
       }
+      cancelPartner();
       advanceTo("deck");
     } catch (e) {
       setError("Deck build failed. Try different parameters.");
@@ -195,6 +241,7 @@ export default function DeckBuilder() {
     setDeck(null);
     setChosenCommander(null);
     setCommanders([]);
+    cancelPartner();
     if (toStep === "format") {
       setArchetypes([]); setColors([]); setBudget(""); setBracket(2);
       setFurthestStepIndex(0);
@@ -398,17 +445,17 @@ export default function DeckBuilder() {
         </Section>
       )}
 
-      {step === "commanders" && (
+      {step === "commanders" && !pendingCommander && (
         <Section
           title="Choose your commander"
           subtitle="Tap a suggestion, or search by name. Picking a commander whose color identity differs from your selected colors will replace those colors."
         >
-          <CommanderSearch onPick={(c) => generateDeck(c)} disabled={loading} />
+          <CommanderSearch onPick={(c) => pickCommander(c)} disabled={loading} />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {commanders.map((c) => (
               <button
                 key={c.id}
-                onClick={() => generateDeck(c)}
+                onClick={() => pickCommander(c)}
                 disabled={loading}
                 className="group overflow-hidden rounded-xl border border-border bg-card text-left transition hover:border-primary hover:shadow-arcane disabled:opacity-60"
               >
@@ -444,6 +491,18 @@ export default function DeckBuilder() {
         </Section>
       )}
 
+      {step === "commanders" && pendingCommander && partnerInfo && (
+        <PartnerPicker
+          commander={pendingCommander}
+          info={partnerInfo}
+          options={partnerOptions}
+          loading={partnerLoading || loading}
+          onSkip={() => generateDeck(pendingCommander, null)}
+          onPick={(p) => generateDeck(pendingCommander!, p)}
+          onCancel={cancelPartner}
+        />
+      )}
+
       {step === "deck" && deck && (
         <DeckView
           deck={deck}
@@ -451,7 +510,7 @@ export default function DeckBuilder() {
           archetypes={archetypes}
           onRestart={() => reset("format")}
           onTweak={() => reset("options")}
-          onUpdateDeck={(next) => setDeck(next)}
+          onUpdateDeck={(next) => setDeck({ ...next, partner: deck.partner, synergies: deck.synergies })}
         />
       )}
 
@@ -557,7 +616,7 @@ function NavRow({ onBack, next }: { onBack?: (() => void) | undefined; next?: Re
 function DeckView({
   deck, format, archetypes, onRestart, onTweak, onUpdateDeck,
 }: {
-  deck: { commander: ScryfallCard | null; cards: ScryfallCard[]; synergies?: CommanderSynergy[] };
+  deck: { commander: ScryfallCard | null; partner: ScryfallCard | null; cards: ScryfallCard[]; synergies?: CommanderSynergy[] };
   format: Format;
   archetypes: string[];
   onRestart: () => void;
@@ -571,7 +630,7 @@ function DeckView({
   const [listCopied, setListCopied] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
 
-  const decklistText = deckToText(deck.commander, deck.cards);
+  const decklistText = deckToText(deck.commander, deck.cards, deck.partner);
 
   async function copyDecklist() {
     try {
@@ -581,9 +640,10 @@ function DeckView({
     } catch {}
   }
 
-  const total = deck.cards.length + (deck.commander ? 1 : 0);
+  const total = deck.cards.length + (deck.commander ? 1 : 0) + (deck.partner ? 1 : 0);
   const price = deck.cards.reduce((s, c) => s + (parseFloat(c.prices?.usd ?? "0") || 0), 0)
-    + (deck.commander ? parseFloat(deck.commander.prices?.usd ?? "0") || 0 : 0);
+    + (deck.commander ? parseFloat(deck.commander.prices?.usd ?? "0") || 0 : 0)
+    + (deck.partner ? parseFloat(deck.partner.prices?.usd ?? "0") || 0 : 0);
 
   // Group + dedupe for display
   const grouped = new Map<string, { card: ScryfallCard; count: number }>();
@@ -598,7 +658,7 @@ function DeckView({
   );
 
   function download() {
-    const txt = deckToText(deck.commander, deck.cards);
+    const txt = deckToText(deck.commander, deck.cards, deck.partner);
     const blob = new Blob([txt], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -709,6 +769,20 @@ function DeckView({
         </div>
       )}
 
+      {deck.partner && (
+        <div className="flex flex-col gap-6 rounded-2xl border border-primary/40 bg-card p-6 shadow-arcane sm:flex-row">
+          {cardImage(deck.partner) && (
+            <img src={cardImage(deck.partner)} alt={deck.partner.name} className="w-48 rounded-lg shadow-card-elev" />
+          )}
+          <div className="flex-1">
+            <div className="text-xs uppercase tracking-widest text-primary">Partner / Background</div>
+            <h3 className="mt-1 font-display text-2xl">{deck.partner.name}</h3>
+            <div className="text-sm text-muted-foreground">{deck.partner.type_line}</div>
+            <p className="mt-3 whitespace-pre-line text-sm text-foreground/90">{deck.partner.oracle_text}</p>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {groupedList.map(({ card, count }) => (
           <a
@@ -742,7 +816,7 @@ function DeckView({
         format={format}
         archetypes={archetypes}
         commander={deck.commander}
-        cards={deck.cards}
+        cards={deck.partner ? [deck.partner, ...deck.cards] : deck.cards}
         onSaved={(code) => { setShareCode(code); setSaveOpen(false); }}
       />
 
@@ -1058,5 +1132,121 @@ function SwapDialog({
         </div>
       </div>
     </div>
+  );
+}
+
+// ---- Partner / Background picker ----------------------------------------
+
+function partnerStepTitle(info: PartnerInfo): string {
+  switch (info.kind) {
+    case "partner": return "Choose a Partner";
+    case "partner-with": return `Pair with ${info.with ?? "Partner"}`;
+    case "friends-forever": return "Choose a Friends Forever partner";
+    case "choose-background": return "Choose a Background";
+    case "background": return "Choose a commander (Choose a Background)";
+    case "doctor-companion": return "Choose a Time Lord Doctor";
+    case "time-lord-doctor": return "Choose a Doctor's companion";
+  }
+}
+
+function partnerStepHint(info: PartnerInfo): string {
+  switch (info.kind) {
+    case "partner": return "Pick any other legendary creature with Partner — their color identities combine.";
+    case "partner-with": return "This commander has a specific partner.";
+    case "friends-forever": return "Pick any other legendary creature with Friends forever.";
+    case "choose-background": return "Pick a Background enchantment to ride along with this commander.";
+    case "background": return "Pick a legendary creature with 'Choose a Background'.";
+    case "doctor-companion": return "Pair with a Time Lord Doctor.";
+    case "time-lord-doctor": return "Pair with a Doctor's companion.";
+  }
+}
+
+function PartnerPicker({
+  commander, info, options, loading, onSkip, onPick, onCancel,
+}: {
+  commander: ScryfallCard;
+  info: PartnerInfo;
+  options: ScryfallCard[];
+  loading: boolean;
+  onSkip: () => void;
+  onPick: (p: ScryfallCard) => void;
+  onCancel: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const filtered = q.trim().length === 0
+    ? options
+    : options.filter((c) => c.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const canSkip = info.kind !== "partner-with";
+
+  return (
+    <Section title={partnerStepTitle(info)} subtitle={partnerStepHint(info)}>
+      <div className="mb-6 flex flex-col gap-4 rounded-xl border border-primary/40 bg-card p-4 sm:flex-row sm:items-center">
+        {cardImage(commander) && (
+          <img src={cardImage(commander)} alt={commander.name} className="w-28 rounded-lg shadow-card-elev" />
+        )}
+        <div className="flex-1">
+          <div className="text-xs uppercase tracking-widest text-primary">Commander</div>
+          <div className="font-display text-lg">{commander.name}</div>
+          <div className="text-xs text-muted-foreground">{commander.type_line}</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {canSkip && (
+            <button
+              onClick={onSkip}
+              disabled={loading}
+              className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary disabled:opacity-50"
+            >
+              Skip — solo commander
+            </button>
+          )}
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary disabled:opacity-50"
+          >
+            Back to commanders
+          </button>
+        </div>
+      </div>
+
+      {options.length > 6 && (
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Filter by name…"
+          className="mb-4 w-full max-w-md rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+        />
+      )}
+
+      {loading && options.length === 0 && (
+        <div className="text-sm text-muted-foreground">Searching for partners…</div>
+      )}
+      {!loading && options.length === 0 && (
+        <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+          No partner candidates found.
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {filtered.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => onPick(c)}
+            disabled={loading}
+            className="group overflow-hidden rounded-xl border border-border bg-card text-left transition hover:border-primary hover:shadow-arcane disabled:opacity-60"
+          >
+            {cardImage(c) ? (
+              <img src={cardImage(c)} alt={c.name} loading="lazy" className="w-full" />
+            ) : (
+              <div className="aspect-[5/7] bg-muted" />
+            )}
+            <div className="p-3">
+              <div className="font-display text-base">{c.name}</div>
+              <div className="text-xs text-muted-foreground">{c.type_line}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </Section>
   );
 }
