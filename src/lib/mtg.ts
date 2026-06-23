@@ -94,6 +94,99 @@ export async function searchCommanders(query: string): Promise<ScryfallCard[]> {
   }
 }
 
+// ---- Partner / Background / Companion detection -------------------------
+
+export type PartnerKind =
+  | "partner"            // plain Partner — pairs with any other Partner
+  | "partner-with"       // Partner with [specific named card]
+  | "friends-forever"    // pairs with any other Friends forever
+  | "choose-background"  // commander picks a Background enchantment
+  | "background"         // is a Background (rare path: user picks it first)
+  | "doctor-companion"   // pairs with any Time Lord Doctor
+  | "time-lord-doctor";  // pairs with any Doctor's companion
+
+export type PartnerInfo = { kind: PartnerKind; with?: string };
+
+export function detectPartner(card: ScryfallCard): PartnerInfo | null {
+  const text = (card.oracle_text ?? "").toLowerCase();
+  const type = (card.type_line ?? "").toLowerCase();
+
+  // Backgrounds are "Legendary Enchantment — Background"
+  if (type.includes("background")) return { kind: "background" };
+
+  // "Choose a Background" appears on certain legendary creatures.
+  if (/choose a background/i.test(text)) return { kind: "choose-background" };
+
+  // "Partner with <Name>" — extract the name.
+  const pw = text.match(/partner with ([^\n(.,]+)/i);
+  if (pw) return { kind: "partner-with", with: pw[1].trim().replace(/\s+$/, "") };
+
+  if (/friends forever/i.test(text)) return { kind: "friends-forever" };
+  if (/doctor's companion/i.test(text)) return { kind: "doctor-companion" };
+  // "Time Lord Doctor" subtype implies it can be paired by a Doctor's companion.
+  if (type.includes("time lord") && type.includes("doctor")) return { kind: "time-lord-doctor" };
+
+  // Plain "Partner" keyword — must not be the "Partner with" variant.
+  // Use a word boundary check to avoid matching "Partners".
+  if (/(^|\n|[\s.,;])partner(\s*[\n(.,]|$)/i.test(text) && !/partner with/i.test(text)) {
+    return { kind: "partner" };
+  }
+  return null;
+}
+
+// Find candidate partner cards for a given commander, based on its partner type.
+export async function findPartnerCandidates(commander: ScryfallCard): Promise<{
+  info: PartnerInfo;
+  options: ScryfallCard[];
+} | null> {
+  const info = detectPartner(commander);
+  if (!info) return null;
+
+  async function search(q: string, limit = 60): Promise<ScryfallCard[]> {
+    try {
+      const enc = encodeURIComponent(q);
+      const data = await scry<{ data: ScryfallCard[] }>(
+        `/cards/search?q=${enc}&order=edhrec&unique=cards&page=1`,
+      );
+      return data.data.slice(0, limit);
+    } catch {
+      return [];
+    }
+  }
+
+  let options: ScryfallCard[] = [];
+  switch (info.kind) {
+    case "partner":
+      options = await search(`is:commander game:paper o:"partner" -o:"partner with" -name:"${commander.name}"`);
+      break;
+    case "partner-with":
+      if (info.with) {
+        try {
+          const card = await scry<ScryfallCard>(`/cards/named?exact=${encodeURIComponent(info.with)}`);
+          options = [card];
+        } catch { options = []; }
+      }
+      break;
+    case "friends-forever":
+      options = await search(`is:commander game:paper o:"friends forever" -name:"${commander.name}"`);
+      break;
+    case "choose-background":
+      options = await search(`t:background game:paper is:commander`);
+      break;
+    case "background":
+      // The Background was picked first; find legendary creatures that "Choose a Background".
+      options = await search(`is:commander game:paper o:"choose a background"`);
+      break;
+    case "doctor-companion":
+      options = await search(`is:commander game:paper t:"time lord doctor"`);
+      break;
+    case "time-lord-doctor":
+      options = await search(`is:commander game:paper o:"doctor's companion"`);
+      break;
+  }
+  return { info, options };
+}
+
 // Free-text card search, optionally scoped to a format and color identity.
 export async function searchCards(opts: {
   query: string;
