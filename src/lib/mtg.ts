@@ -489,13 +489,25 @@ function sanitizeTribe(input?: string): string {
 // Build a Commander (100-card) decklist using Scryfall searches per role.
 export async function buildCommanderDeck(opts: {
   commander: ScryfallCard;
+  partner?: ScryfallCard | null;
   archetypes: string[];
   tribe?: string;
   budget?: number;
   powerLevel: number; // 1-10
-}): Promise<{ commander: ScryfallCard; cards: ScryfallCard[]; synergies: CommanderSynergy[] }> {
+}): Promise<{
+  commander: ScryfallCard;
+  partner: ScryfallCard | null;
+  cards: ScryfallCard[];
+  synergies: CommanderSynergy[];
+}> {
   const tribeTok = sanitizeTribe(opts.tribe);
-  const ci = (opts.commander.color_identity ?? []).join("").toLowerCase() || "c";
+  const partner = opts.partner ?? null;
+  // Color identity = union of commander + partner identities.
+  const ciSet = new Set<string>([
+    ...(opts.commander.color_identity ?? []),
+    ...(partner?.color_identity ?? []),
+  ].map((c) => c.toLowerCase()));
+  const ci = ciSet.size === 0 ? "c" : [...ciSet].sort().join("");
   const budgetPer = opts.budget ? Math.max(0.25, opts.budget / 100) : undefined;
   const priceClause = budgetPer ? ` usd<=${budgetPer.toFixed(2)}` : "";
   const power = opts.powerLevel;
