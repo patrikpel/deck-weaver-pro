@@ -1134,3 +1134,119 @@ function SwapDialog({
     </div>
   );
 }
+
+// ---- Partner / Background picker ----------------------------------------
+
+function partnerStepTitle(info: PartnerInfo): string {
+  switch (info.kind) {
+    case "partner": return "Choose a Partner";
+    case "partner-with": return `Pair with ${info.with ?? "Partner"}`;
+    case "friends-forever": return "Choose a Friends Forever partner";
+    case "choose-background": return "Choose a Background";
+    case "background": return "Choose a commander (Choose a Background)";
+    case "doctor-companion": return "Choose a Time Lord Doctor";
+    case "time-lord-doctor": return "Choose a Doctor's companion";
+  }
+}
+
+function partnerStepHint(info: PartnerInfo): string {
+  switch (info.kind) {
+    case "partner": return "Pick any other legendary creature with Partner — their color identities combine.";
+    case "partner-with": return "This commander has a specific partner.";
+    case "friends-forever": return "Pick any other legendary creature with Friends forever.";
+    case "choose-background": return "Pick a Background enchantment to ride along with this commander.";
+    case "background": return "Pick a legendary creature with 'Choose a Background'.";
+    case "doctor-companion": return "Pair with a Time Lord Doctor.";
+    case "time-lord-doctor": return "Pair with a Doctor's companion.";
+  }
+}
+
+function PartnerPicker({
+  commander, info, options, loading, onSkip, onPick, onCancel,
+}: {
+  commander: ScryfallCard;
+  info: PartnerInfo;
+  options: ScryfallCard[];
+  loading: boolean;
+  onSkip: () => void;
+  onPick: (p: ScryfallCard) => void;
+  onCancel: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const filtered = q.trim().length === 0
+    ? options
+    : options.filter((c) => c.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const canSkip = info.kind !== "partner-with";
+
+  return (
+    <Section title={partnerStepTitle(info)} subtitle={partnerStepHint(info)}>
+      <div className="mb-6 flex flex-col gap-4 rounded-xl border border-primary/40 bg-card p-4 sm:flex-row sm:items-center">
+        {cardImage(commander) && (
+          <img src={cardImage(commander)} alt={commander.name} className="w-28 rounded-lg shadow-card-elev" />
+        )}
+        <div className="flex-1">
+          <div className="text-xs uppercase tracking-widest text-primary">Commander</div>
+          <div className="font-display text-lg">{commander.name}</div>
+          <div className="text-xs text-muted-foreground">{commander.type_line}</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {canSkip && (
+            <button
+              onClick={onSkip}
+              disabled={loading}
+              className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary disabled:opacity-50"
+            >
+              Skip — solo commander
+            </button>
+          )}
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary disabled:opacity-50"
+          >
+            Back to commanders
+          </button>
+        </div>
+      </div>
+
+      {options.length > 6 && (
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Filter by name…"
+          className="mb-4 w-full max-w-md rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+        />
+      )}
+
+      {loading && options.length === 0 && (
+        <div className="text-sm text-muted-foreground">Searching for partners…</div>
+      )}
+      {!loading && options.length === 0 && (
+        <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+          No partner candidates found.
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {filtered.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => onPick(c)}
+            disabled={loading}
+            className="group overflow-hidden rounded-xl border border-border bg-card text-left transition hover:border-primary hover:shadow-arcane disabled:opacity-60"
+          >
+            {cardImage(c) ? (
+              <img src={cardImage(c)} alt={c.name} loading="lazy" className="w-full" />
+            ) : (
+              <div className="aspect-[5/7] bg-muted" />
+            )}
+            <div className="p-3">
+              <div className="font-display text-base">{c.name}</div>
+              <div className="text-xs text-muted-foreground">{c.type_line}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </Section>
+  );
+}
