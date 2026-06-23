@@ -629,7 +629,7 @@ export async function buildCommanderDeck(opts: {
       const slotsForSyn = Math.max(2, Math.round((syn.weight / weightSum) * SYN_BUDGET));
       const perQuery = Math.max(1, Math.ceil(slotsForSyn / syn.queries.length));
       for (const q of syn.queries) {
-        if (picked.length >= 63) break;
+        if (picked.length >= nonlandTarget) break;
         await fillRole(`${idClause} ${q}`, perQuery);
       }
     }
