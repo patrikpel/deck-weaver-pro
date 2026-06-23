@@ -186,6 +186,193 @@ export async function suggestCommanders(opts: {
   return out.slice(0, TOTAL);
 }
 
+export type CommanderSynergy = {
+  id: string;
+  label: string;
+  queries: string[];
+  weight: number; // approximate slot share
+};
+
+// Inspect a commander's oracle text + type line and return ordered synergy
+// themes that the deck should be built around. Strongest signal first.
+export function extractCommanderSynergies(commander: ScryfallCard): CommanderSynergy[] {
+  const text = (commander.oracle_text ?? "").toLowerCase();
+  const type = (commander.type_line ?? "").toLowerCase();
+  const blob = `${text}\n${type}`;
+  const out: CommanderSynergy[] = [];
+  const push = (s: CommanderSynergy) => {
+    if (!out.find((x) => x.id === s.id)) out.push(s);
+  };
+
+  if (/gain( \w+)? life|whenever you gain life|lifelink/.test(blob)) {
+    push({
+      id: "lifegain",
+      label: "Lifegain",
+      weight: 10,
+      queries: [
+        `o:"whenever you gain life"`,
+        `o:lifelink`,
+        `(o:"you gain" o:"life") -t:land`,
+      ],
+    });
+  }
+  if (/\+1\/\+1 counter|put .* counters on/.test(blob)) {
+    push({
+      id: "plus1",
+      label: "+1/+1 counters",
+      weight: 10,
+      queries: [
+        `o:"+1/+1 counter"`,
+        `o:proliferate`,
+        `o:"put" o:"+1/+1 counters"`,
+      ],
+    });
+  }
+  if (/create .* token|creature tokens? you control/.test(blob)) {
+    push({
+      id: "tokens",
+      label: "Tokens",
+      weight: 8,
+      queries: [
+        `o:"create" o:"token"`,
+        `o:"creature tokens you control"`,
+        `o:"anthem" or o:"creatures you control get +"`,
+      ],
+    });
+  }
+  if (/sacrifice (a|another) (creature|permanent|artifact)|whenever .* dies/.test(blob)) {
+    push({
+      id: "sacrifice",
+      label: "Sacrifice / Aristocrats",
+      weight: 9,
+      queries: [
+        `o:"sacrifice a creature"`,
+        `o:"whenever" o:"dies"`,
+        `(o:"create a treasure" or o:"create a food" or o:"create a clue")`,
+      ],
+    });
+  }
+  if (/from (your )?graveyard|return .* to the battlefield|mill|discard/.test(blob)) {
+    push({
+      id: "graveyard",
+      label: "Graveyard / Reanimator",
+      weight: 8,
+      queries: [
+        `o:"return" o:"from" o:"graveyard" o:"battlefield"`,
+        `(o:"into your graveyard" or o:mill or o:"self-mill")`,
+        `o:"from your graveyard"`,
+      ],
+    });
+  }
+  if (/artifact/.test(blob) && /(artifact you control|whenever.*artifact|metalcraft|affinity|cast.*artifact)/.test(blob)) {
+    push({
+      id: "artifacts",
+      label: "Artifacts matter",
+      weight: 8,
+      queries: [
+        `t:artifact -t:creature`,
+        `o:"artifact you control"`,
+        `t:creature t:artifact`,
+      ],
+    });
+  }
+  if (/enchantment/.test(blob) && /(enchantment you control|whenever.*enchantment|constellation|cast.*enchantment)/.test(blob)) {
+    push({
+      id: "enchantments",
+      label: "Enchantments matter",
+      weight: 8,
+      queries: [
+        `t:enchantment -t:creature -t:aura`,
+        `o:constellation`,
+        `t:aura o:"enchant creature"`,
+      ],
+    });
+  }
+  if (/instant or sorcery|noncreature spell|whenever you cast|prowess|magecraft/.test(blob)) {
+    push({
+      id: "spellslinger",
+      label: "Spellslinger",
+      weight: 9,
+      queries: [
+        `(t:instant or t:sorcery) cmc<=3`,
+        `o:"whenever you cast" (o:instant or o:sorcery)`,
+        `(o:prowess or o:magecraft)`,
+      ],
+    });
+  }
+  if (/whenever .* attacks|whenever .* deals combat damage|extra combat/.test(blob)) {
+    push({
+      id: "combat",
+      label: "Combat triggers",
+      weight: 7,
+      queries: [
+        `o:"whenever" o:"attacks"`,
+        `(o:flying or o:trample or o:"can't be blocked" or o:menace) t:creature`,
+        `o:"additional combat phase"`,
+      ],
+    });
+  }
+  if (/counter target .* spell/.test(blob)) {
+    push({
+      id: "counters",
+      label: "Counterspells",
+      weight: 6,
+      queries: [`(t:instant) o:"counter target" o:"spell"`],
+    });
+  }
+  if (/whenever you draw|draw your second card|if you('ve| have) drawn/.test(blob)) {
+    push({
+      id: "draw",
+      label: "Card draw matters",
+      weight: 7,
+      queries: [
+        `(t:instant or t:sorcery) o:"draw" o:"cards" cmc<=3`,
+        `o:"whenever you draw"`,
+        `o:"draw two cards"`,
+      ],
+    });
+  }
+  if (/landfall|whenever a land enters/.test(blob)) {
+    push({
+      id: "landfall",
+      label: "Landfall",
+      weight: 9,
+      queries: [
+        `o:landfall`,
+        `(o:"search your library" o:land o:battlefield)`,
+        `(o:"play an additional land" or o:"play two additional lands")`,
+      ],
+    });
+  }
+  if (/equip|equipped creature|attach/.test(blob)) {
+    push({
+      id: "equipment",
+      label: "Equipment",
+      weight: 7,
+      queries: [
+        `t:equipment`,
+        `o:"equipped creature"`,
+      ],
+    });
+  }
+  // Auto-tribal: commander text says "other <Type>"
+  const tribalMatch = text.match(/other ([a-z]+)s?\b/);
+  if (tribalMatch) {
+    const tribe = tribalMatch[1];
+    // skip generic words
+    if (!["creatures", "permanents", "spells", "players", "lands"].includes(tribe + "s")) {
+      push({
+        id: `tribal-${tribe}`,
+        label: `${tribe[0].toUpperCase()}${tribe.slice(1)} tribal`,
+        weight: 8,
+        queries: [`t:creature t:${tribe}`],
+      });
+    }
+  }
+  return out;
+}
+
+
 // Normalize a free-text tribe input into a Scryfall-safe type token.
 // Accepts "Elves", "elf", "Goblin Warrior" → quoted multi-word as needed.
 function sanitizeTribe(input?: string): string {
