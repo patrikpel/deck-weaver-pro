@@ -15,6 +15,7 @@ import {
   type Format,
   type ManaColor,
   type ScryfallCard,
+  type CommanderSynergy,
 } from "@/lib/mtg";
 
 type Step = "format" | "archetype" | "options" | "commanders" | "deck";
