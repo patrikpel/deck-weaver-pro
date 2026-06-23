@@ -658,7 +658,7 @@ function DeckView({
   );
 
   function download() {
-    const txt = deckToText(deck.commander, deck.cards);
+    const txt = deckToText(deck.commander, deck.cards, deck.partner);
     const blob = new Blob([txt], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
