@@ -630,7 +630,7 @@ function DeckView({
   const [listCopied, setListCopied] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
 
-  const decklistText = deckToText(deck.commander, deck.cards);
+  const decklistText = deckToText(deck.commander, deck.cards, deck.partner);
 
   async function copyDecklist() {
     try {
