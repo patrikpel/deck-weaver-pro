@@ -694,7 +694,7 @@ export async function buildCommanderDeck(opts: {
     }
   }
 
-  return { commander: opts.commander, cards: picked.slice(0, 99), synergies };
+  return { commander: opts.commander, partner, cards: picked.slice(0, finalCardCap), synergies };
 }
 
 // Constructed (60-card) for Standard/Modern.
