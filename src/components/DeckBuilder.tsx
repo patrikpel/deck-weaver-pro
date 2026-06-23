@@ -54,7 +54,7 @@ export default function DeckBuilder() {
   const [error, setError] = useState<string | null>(null);
   const [commanders, setCommanders] = useState<ScryfallCard[]>([]);
   const [chosenCommander, setChosenCommander] = useState<ScryfallCard | null>(null);
-  const [deck, setDeck] = useState<{ commander: ScryfallCard | null; cards: ScryfallCard[] } | null>(null);
+  const [deck, setDeck] = useState<{ commander: ScryfallCard | null; cards: ScryfallCard[]; synergies?: CommanderSynergy[] } | null>(null);
 
   const currentIdx = stepIndex(step, format);
 
