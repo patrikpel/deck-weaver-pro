@@ -800,13 +800,18 @@ export async function buildConstructedDeck(opts: {
   return { commander: null, cards: picked.slice(0, 60) };
 }
 
-export function deckToText(commander: ScryfallCard | null, cards: ScryfallCard[]): string {
+export function deckToText(
+  commander: ScryfallCard | null,
+  cards: ScryfallCard[],
+  partner: ScryfallCard | null = null,
+): string {
   const counts = new Map<string, number>();
   for (const c of cards) counts.set(c.name, (counts.get(c.name) ?? 0) + 1);
   const lines: string[] = [];
   if (commander) {
     lines.push("// Commander");
     lines.push(`1 ${commander.name}`);
+    if (partner) lines.push(`1 ${partner.name}`);
     lines.push("");
     lines.push("// Deck");
   }
