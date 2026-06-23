@@ -579,6 +579,9 @@ export async function buildCommanderDeck(opts: {
   ];
 
   const seen = new Set<string>([opts.commander.id, opts.commander.name]);
+  if (partner) { seen.add(partner.id); seen.add(partner.name); }
+  const nonlandTarget = partner ? 62 : 63;
+  const finalCardCap = partner ? 98 : 99;
   const picked: ScryfallCard[] = [];
   const order = power >= 7 ? "edhrec" : "released";
 
