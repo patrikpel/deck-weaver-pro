@@ -557,7 +557,7 @@ function NavRow({ onBack, next }: { onBack?: (() => void) | undefined; next?: Re
 function DeckView({
   deck, format, archetypes, onRestart, onTweak, onUpdateDeck,
 }: {
-  deck: { commander: ScryfallCard | null; cards: ScryfallCard[] };
+  deck: { commander: ScryfallCard | null; cards: ScryfallCard[]; synergies?: CommanderSynergy[] };
   format: Format;
   archetypes: string[];
   onRestart: () => void;
