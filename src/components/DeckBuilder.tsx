@@ -1166,7 +1166,7 @@ function partnerStepHint(info: PartnerInfo): string {
 
 
 function PartnerPicker({
-  commander, info, options, loading, onSkip, onPick, onCancel,
+  commander, info, options, loading, onSkip, onPick, onCancel, onSearch,
 }: {
   commander: ScryfallCard;
   info: PartnerInfo;
@@ -1175,12 +1175,24 @@ function PartnerPicker({
   onSkip: () => void;
   onPick: (p: ScryfallCard) => void;
   onCancel: () => void;
+  onSearch: (query: string) => Promise<void>;
 }) {
   const [q, setQ] = useState("");
-  const filtered = q.trim().length === 0
-    ? options
-    : options.filter((c) => c.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const [searching, setSearching] = useState(false);
   const canSkip = info.kind !== "partner-with";
+
+  async function submitSearch(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (q.trim().length < 2) return;
+    setSearching(true);
+    try { await onSearch(q.trim()); } finally { setSearching(false); }
+  }
+
+  async function resetSearch() {
+    setQ("");
+    setSearching(true);
+    try { await onSearch(""); } finally { setSearching(false); }
+  }
 
   return (
     <Section title={partnerStepTitle(info)} subtitle={partnerStepHint(info)}>
@@ -1213,13 +1225,32 @@ function PartnerPicker({
         </div>
       </div>
 
-      {options.length > 6 && (
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Filter by name…"
-          className="mb-4 w-full max-w-md rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-        />
+      {info.kind !== "partner-with" && (
+        <form onSubmit={submitSearch} className="mb-4 flex flex-wrap gap-2">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search a specific partner by name…"
+            className="flex-1 min-w-[240px] max-w-md rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+          />
+          <button
+            type="submit"
+            disabled={loading || searching || q.trim().length < 2}
+            className="rounded-md border border-primary px-4 py-2 text-sm text-primary hover:bg-primary hover:text-primary-foreground disabled:opacity-50"
+          >
+            {searching ? "Searching…" : "Search"}
+          </button>
+          {q.length > 0 && (
+            <button
+              type="button"
+              onClick={resetSearch}
+              disabled={loading || searching}
+              className="rounded-md border border-border px-4 py-2 text-sm hover:border-primary disabled:opacity-50"
+            >
+              Reset
+            </button>
+          )}
+        </form>
       )}
 
       {loading && options.length === 0 && (
@@ -1230,6 +1261,7 @@ function PartnerPicker({
           No partner candidates found.
         </div>
       )}
+
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((c) => (
