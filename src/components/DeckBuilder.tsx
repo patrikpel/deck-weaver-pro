@@ -168,11 +168,8 @@ export default function DeckBuilder() {
       await generateDeck(commander);
       return;
     }
-    const info = detectPartner(commander);
-    if (!info) {
-      await generateDeck(commander);
-      return;
-    }
+    const detected = detectPartner(commander);
+    const info: PartnerInfo = detected ?? { kind: "suggested" };
     setPendingCommander(commander);
     setPartnerInfo(info);
     setPartnerOptions([]);
@@ -180,7 +177,8 @@ export default function DeckBuilder() {
     setError(null);
     try {
       const res = await findPartnerCandidates(commander);
-      setPartnerOptions(res?.options ?? []);
+      setPartnerOptions(res.options);
+      setPartnerInfo(res.info);
     } catch {
       setError("Couldn't load partner options.");
     } finally {
@@ -1146,6 +1144,7 @@ function partnerStepTitle(info: PartnerInfo): string {
     case "background": return "Choose a commander (Choose a Background)";
     case "doctor-companion": return "Choose a Time Lord Doctor";
     case "time-lord-doctor": return "Choose a Doctor's companion";
+    case "suggested": return "Add a second commander? (optional)";
   }
 }
 
@@ -1158,8 +1157,10 @@ function partnerStepHint(info: PartnerInfo): string {
     case "background": return "Pick a legendary creature with 'Choose a Background'.";
     case "doctor-companion": return "Pair with a Time Lord Doctor.";
     case "time-lord-doctor": return "Pair with a Doctor's companion.";
+    case "suggested": return "This commander has no Partner mechanic, but you can still pick a popular co-commander in the same colors. Skip to play solo.";
   }
 }
+
 
 function PartnerPicker({
   commander, info, options, loading, onSkip, onPick, onCancel,

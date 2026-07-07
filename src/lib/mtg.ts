@@ -103,7 +103,8 @@ export type PartnerKind =
   | "choose-background"  // commander picks a Background enchantment
   | "background"         // is a Background (rare path: user picks it first)
   | "doctor-companion"   // pairs with any Time Lord Doctor
-  | "time-lord-doctor";  // pairs with any Doctor's companion
+  | "time-lord-doctor"   // pairs with any Doctor's companion
+  | "suggested";         // no partner mechanic — user-chosen optional co-commander
 
 export type PartnerInfo = { kind: PartnerKind; with?: string };
 
@@ -135,12 +136,14 @@ export function detectPartner(card: ScryfallCard): PartnerInfo | null {
 }
 
 // Find candidate partner cards for a given commander, based on its partner type.
+// If the commander has no partner mechanic, returns a curated list of
+// "suggested" secondary commanders (color-identity ⊆ commander's, sorted by edhrec).
 export async function findPartnerCandidates(commander: ScryfallCard): Promise<{
   info: PartnerInfo;
   options: ScryfallCard[];
-} | null> {
-  const info = detectPartner(commander);
-  if (!info) return null;
+}> {
+  const detected = detectPartner(commander);
+  const info: PartnerInfo = detected ?? { kind: "suggested" };
 
   async function search(q: string, limit = 60): Promise<ScryfallCard[]> {
     try {
@@ -183,6 +186,13 @@ export async function findPartnerCandidates(commander: ScryfallCard): Promise<{
     case "time-lord-doctor":
       options = await search(`is:commander game:paper o:"doctor's companion"`);
       break;
+    case "suggested": {
+      // Suggest good co-commanders inside the commander's color identity.
+      const ci = (commander.color_identity ?? []).map((c) => c.toLowerCase()).join("");
+      const idClause = ci.length > 0 ? `id<=${ci}` : `id:c`;
+      options = await search(`is:commander game:paper ${idClause} -name:"${commander.name}"`, 36);
+      break;
+    }
   }
   return { info, options };
 }
