@@ -11,6 +11,7 @@ import {
   deckToText,
   detectPartner,
   findPartnerCandidates,
+  searchPartnerCandidates,
   searchCards,
   searchCommanders,
   suggestCommanders,
