@@ -168,11 +168,8 @@ export default function DeckBuilder() {
       await generateDeck(commander);
       return;
     }
-    const info = detectPartner(commander);
-    if (!info) {
-      await generateDeck(commander);
-      return;
-    }
+    const detected = detectPartner(commander);
+    const info: PartnerInfo = detected ?? { kind: "suggested" };
     setPendingCommander(commander);
     setPartnerInfo(info);
     setPartnerOptions([]);
@@ -180,7 +177,8 @@ export default function DeckBuilder() {
     setError(null);
     try {
       const res = await findPartnerCandidates(commander);
-      setPartnerOptions(res?.options ?? []);
+      setPartnerOptions(res.options);
+      setPartnerInfo(res.info);
     } catch {
       setError("Couldn't load partner options.");
     } finally {
