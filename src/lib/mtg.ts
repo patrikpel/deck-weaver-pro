@@ -99,6 +99,7 @@ export async function searchCommanders(query: string): Promise<ScryfallCard[]> {
 export type PartnerKind =
   | "partner"            // plain Partner — pairs with any other Partner
   | "partner-with"       // Partner with [specific named card]
+  | "partner-restricted" // Partner — <Descriptor> (pairs only with same descriptor)
   | "friends-forever"    // pairs with any other Friends forever
   | "choose-background"  // commander picks a Background enchantment
   | "background"         // is a Background (rare path: user picks it first)
@@ -122,18 +123,24 @@ export function detectPartner(card: ScryfallCard): PartnerInfo | null {
   const pw = text.match(/partner with ([^\n(.,]+)/i);
   if (pw) return { kind: "partner-with", with: pw[1].trim().replace(/\s+$/, "") };
 
+  // "Partner — <Descriptor>" restricted partner (Commander Legends: BG onward,
+  // e.g. "Partner — Father & Son", "Partner — Survivors").
+  // Accept em-dash, en-dash, or hyphen.
+  const pr = text.match(/partner\s*[—–-]\s*([^\n(.]+)/i);
+  if (pr) return { kind: "partner-restricted", with: pr[1].trim().replace(/[\s.,;]+$/, "") };
+
   if (/friends forever/i.test(text)) return { kind: "friends-forever" };
   if (/doctor's companion/i.test(text)) return { kind: "doctor-companion" };
   // "Time Lord Doctor" subtype implies it can be paired by a Doctor's companion.
   if (type.includes("time lord") && type.includes("doctor")) return { kind: "time-lord-doctor" };
 
-  // Plain "Partner" keyword — must not be the "Partner with" variant.
-  // Use a word boundary check to avoid matching "Partners".
-  if (/(^|\n|[\s.,;])partner(\s*[\n(.,]|$)/i.test(text) && !/partner with/i.test(text)) {
+  // Plain "Partner" keyword — must not be a "Partner with" / "Partner —" variant.
+  if (/(^|\n|[\s.,;])partner(\s*[\n(.,]|$)/i.test(text) && !/partner with/i.test(text) && !/partner\s*[—–-]/i.test(text)) {
     return { kind: "partner" };
   }
   return null;
 }
+
 
 // Find candidate partner cards for a given commander, based on its partner type.
 // If the commander has no partner mechanic, returns a curated list of
