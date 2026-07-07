@@ -151,7 +151,55 @@ export async function findPartnerCandidates(commander: ScryfallCard): Promise<{
 }> {
   const detected = detectPartner(commander);
   const info: PartnerInfo = detected ?? { kind: "suggested" };
+  const options = await runPartnerSearch(commander, info);
+  return { info, options };
+}
 
+// Free-text search restricted to the partner constraint of the current commander.
+// Used when the user wants to look up a specific card by name in the partner step.
+export async function searchPartnerCandidates(
+  commander: ScryfallCard,
+  info: PartnerInfo,
+  query: string,
+): Promise<ScryfallCard[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  return runPartnerSearch(commander, info, q);
+}
+
+function partnerBaseFilter(commander: ScryfallCard, info: PartnerInfo): string | null {
+  const notSelf = `-name:"${commander.name}"`;
+  switch (info.kind) {
+    case "partner":
+      return `is:commander game:paper o:"partner" -o:"partner with" -o:"partner —" -o:"partner -" ${notSelf}`;
+    case "partner-with":
+      return null; // fixed single card
+    case "partner-restricted":
+      if (!info.with) return null;
+      return `is:commander game:paper o:"partner — ${info.with}" ${notSelf}`;
+    case "friends-forever":
+      return `is:commander game:paper o:"friends forever" ${notSelf}`;
+    case "choose-background":
+      return `t:background game:paper is:commander`;
+    case "background":
+      return `is:commander game:paper o:"choose a background"`;
+    case "doctor-companion":
+      return `is:commander game:paper t:"time lord doctor"`;
+    case "time-lord-doctor":
+      return `is:commander game:paper o:"doctor's companion"`;
+    case "suggested": {
+      const ci = (commander.color_identity ?? []).map((c) => c.toLowerCase()).join("");
+      const idClause = ci.length > 0 ? `id<=${ci}` : `id:c`;
+      return `is:commander game:paper ${idClause} ${notSelf}`;
+    }
+  }
+}
+
+async function runPartnerSearch(
+  commander: ScryfallCard,
+  info: PartnerInfo,
+  nameQuery?: string,
+): Promise<ScryfallCard[]> {
   async function search(q: string, limit = 60): Promise<ScryfallCard[]> {
     try {
       const enc = encodeURIComponent(q);
@@ -164,45 +212,23 @@ export async function findPartnerCandidates(commander: ScryfallCard): Promise<{
     }
   }
 
-  let options: ScryfallCard[] = [];
-  switch (info.kind) {
-    case "partner":
-      options = await search(`is:commander game:paper o:"partner" -o:"partner with" -name:"${commander.name}"`);
-      break;
-    case "partner-with":
-      if (info.with) {
-        try {
-          const card = await scry<ScryfallCard>(`/cards/named?exact=${encodeURIComponent(info.with)}`);
-          options = [card];
-        } catch { options = []; }
-      }
-      break;
-    case "friends-forever":
-      options = await search(`is:commander game:paper o:"friends forever" -name:"${commander.name}"`);
-      break;
-    case "choose-background":
-      options = await search(`t:background game:paper is:commander`);
-      break;
-    case "background":
-      // The Background was picked first; find legendary creatures that "Choose a Background".
-      options = await search(`is:commander game:paper o:"choose a background"`);
-      break;
-    case "doctor-companion":
-      options = await search(`is:commander game:paper t:"time lord doctor"`);
-      break;
-    case "time-lord-doctor":
-      options = await search(`is:commander game:paper o:"doctor's companion"`);
-      break;
-    case "suggested": {
-      // Suggest good co-commanders inside the commander's color identity.
-      const ci = (commander.color_identity ?? []).map((c) => c.toLowerCase()).join("");
-      const idClause = ci.length > 0 ? `id<=${ci}` : `id:c`;
-      options = await search(`is:commander game:paper ${idClause} -name:"${commander.name}"`, 36);
-      break;
-    }
+  // Special: partner-with resolves to exactly one named card.
+  if (info.kind === "partner-with") {
+    if (!info.with) return [];
+    if (nameQuery && !info.with.toLowerCase().includes(nameQuery.toLowerCase())) return [];
+    try {
+      const card = await scry<ScryfallCard>(`/cards/named?exact=${encodeURIComponent(info.with)}`);
+      return [card];
+    } catch { return []; }
   }
-  return { info, options };
+
+  const base = partnerBaseFilter(commander, info);
+  if (!base) return [];
+  const namePart = nameQuery ? ` name:${JSON.stringify(nameQuery)}` : "";
+  const limit = info.kind === "suggested" ? 36 : 60;
+  return search(base + namePart, limit);
 }
+
 
 // Free-text card search, optionally scoped to a format and color identity.
 export async function searchCards(opts: {
