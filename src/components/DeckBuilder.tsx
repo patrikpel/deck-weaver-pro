@@ -1146,6 +1146,7 @@ function partnerStepTitle(info: PartnerInfo): string {
     case "background": return "Choose a commander (Choose a Background)";
     case "doctor-companion": return "Choose a Time Lord Doctor";
     case "time-lord-doctor": return "Choose a Doctor's companion";
+    case "suggested": return "Add a second commander? (optional)";
   }
 }
 
@@ -1158,8 +1159,10 @@ function partnerStepHint(info: PartnerInfo): string {
     case "background": return "Pick a legendary creature with 'Choose a Background'.";
     case "doctor-companion": return "Pair with a Time Lord Doctor.";
     case "time-lord-doctor": return "Pair with a Doctor's companion.";
+    case "suggested": return "This commander has no Partner mechanic, but you can still pick a popular co-commander in the same colors. Skip to play solo.";
   }
 }
+
 
 function PartnerPicker({
   commander, info, options, loading, onSkip, onPick, onCancel,
