@@ -103,7 +103,8 @@ export type PartnerKind =
   | "choose-background"  // commander picks a Background enchantment
   | "background"         // is a Background (rare path: user picks it first)
   | "doctor-companion"   // pairs with any Time Lord Doctor
-  | "time-lord-doctor";  // pairs with any Doctor's companion
+  | "time-lord-doctor"   // pairs with any Doctor's companion
+  | "suggested";         // no partner mechanic — user-chosen optional co-commander
 
 export type PartnerInfo = { kind: PartnerKind; with?: string };
 
