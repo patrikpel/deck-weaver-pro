@@ -99,6 +99,7 @@ export async function searchCommanders(query: string): Promise<ScryfallCard[]> {
 export type PartnerKind =
   | "partner"            // plain Partner — pairs with any other Partner
   | "partner-with"       // Partner with [specific named card]
+  | "partner-restricted" // Partner — <Descriptor> (pairs only with same descriptor)
   | "friends-forever"    // pairs with any other Friends forever
   | "choose-background"  // commander picks a Background enchantment
   | "background"         // is a Background (rare path: user picks it first)
@@ -122,18 +123,24 @@ export function detectPartner(card: ScryfallCard): PartnerInfo | null {
   const pw = text.match(/partner with ([^\n(.,]+)/i);
   if (pw) return { kind: "partner-with", with: pw[1].trim().replace(/\s+$/, "") };
 
+  // "Partner — <Descriptor>" restricted partner (Commander Legends: BG onward,
+  // e.g. "Partner — Father & Son", "Partner — Survivors").
+  // Accept em-dash, en-dash, or hyphen.
+  const pr = text.match(/partner\s*[—–-]\s*([^\n(.]+)/i);
+  if (pr) return { kind: "partner-restricted", with: pr[1].trim().replace(/[\s.,;]+$/, "") };
+
   if (/friends forever/i.test(text)) return { kind: "friends-forever" };
   if (/doctor's companion/i.test(text)) return { kind: "doctor-companion" };
   // "Time Lord Doctor" subtype implies it can be paired by a Doctor's companion.
   if (type.includes("time lord") && type.includes("doctor")) return { kind: "time-lord-doctor" };
 
-  // Plain "Partner" keyword — must not be the "Partner with" variant.
-  // Use a word boundary check to avoid matching "Partners".
-  if (/(^|\n|[\s.,;])partner(\s*[\n(.,]|$)/i.test(text) && !/partner with/i.test(text)) {
+  // Plain "Partner" keyword — must not be a "Partner with" / "Partner —" variant.
+  if (/(^|\n|[\s.,;])partner(\s*[\n(.,]|$)/i.test(text) && !/partner with/i.test(text) && !/partner\s*[—–-]/i.test(text)) {
     return { kind: "partner" };
   }
   return null;
 }
+
 
 // Find candidate partner cards for a given commander, based on its partner type.
 // If the commander has no partner mechanic, returns a curated list of
@@ -144,7 +151,55 @@ export async function findPartnerCandidates(commander: ScryfallCard): Promise<{
 }> {
   const detected = detectPartner(commander);
   const info: PartnerInfo = detected ?? { kind: "suggested" };
+  const options = await runPartnerSearch(commander, info);
+  return { info, options };
+}
 
+// Free-text search restricted to the partner constraint of the current commander.
+// Used when the user wants to look up a specific card by name in the partner step.
+export async function searchPartnerCandidates(
+  commander: ScryfallCard,
+  info: PartnerInfo,
+  query: string,
+): Promise<ScryfallCard[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  return runPartnerSearch(commander, info, q);
+}
+
+function partnerBaseFilter(commander: ScryfallCard, info: PartnerInfo): string | null {
+  const notSelf = `-name:"${commander.name}"`;
+  switch (info.kind) {
+    case "partner":
+      return `is:commander game:paper o:"partner" -o:"partner with" -o:"partner —" -o:"partner -" ${notSelf}`;
+    case "partner-with":
+      return null; // fixed single card
+    case "partner-restricted":
+      if (!info.with) return null;
+      return `is:commander game:paper o:"partner — ${info.with}" ${notSelf}`;
+    case "friends-forever":
+      return `is:commander game:paper o:"friends forever" ${notSelf}`;
+    case "choose-background":
+      return `t:background game:paper is:commander`;
+    case "background":
+      return `is:commander game:paper o:"choose a background"`;
+    case "doctor-companion":
+      return `is:commander game:paper t:"time lord doctor"`;
+    case "time-lord-doctor":
+      return `is:commander game:paper o:"doctor's companion"`;
+    case "suggested": {
+      const ci = (commander.color_identity ?? []).map((c) => c.toLowerCase()).join("");
+      const idClause = ci.length > 0 ? `id<=${ci}` : `id:c`;
+      return `is:commander game:paper ${idClause} ${notSelf}`;
+    }
+  }
+}
+
+async function runPartnerSearch(
+  commander: ScryfallCard,
+  info: PartnerInfo,
+  nameQuery?: string,
+): Promise<ScryfallCard[]> {
   async function search(q: string, limit = 60): Promise<ScryfallCard[]> {
     try {
       const enc = encodeURIComponent(q);
@@ -157,45 +212,23 @@ export async function findPartnerCandidates(commander: ScryfallCard): Promise<{
     }
   }
 
-  let options: ScryfallCard[] = [];
-  switch (info.kind) {
-    case "partner":
-      options = await search(`is:commander game:paper o:"partner" -o:"partner with" -name:"${commander.name}"`);
-      break;
-    case "partner-with":
-      if (info.with) {
-        try {
-          const card = await scry<ScryfallCard>(`/cards/named?exact=${encodeURIComponent(info.with)}`);
-          options = [card];
-        } catch { options = []; }
-      }
-      break;
-    case "friends-forever":
-      options = await search(`is:commander game:paper o:"friends forever" -name:"${commander.name}"`);
-      break;
-    case "choose-background":
-      options = await search(`t:background game:paper is:commander`);
-      break;
-    case "background":
-      // The Background was picked first; find legendary creatures that "Choose a Background".
-      options = await search(`is:commander game:paper o:"choose a background"`);
-      break;
-    case "doctor-companion":
-      options = await search(`is:commander game:paper t:"time lord doctor"`);
-      break;
-    case "time-lord-doctor":
-      options = await search(`is:commander game:paper o:"doctor's companion"`);
-      break;
-    case "suggested": {
-      // Suggest good co-commanders inside the commander's color identity.
-      const ci = (commander.color_identity ?? []).map((c) => c.toLowerCase()).join("");
-      const idClause = ci.length > 0 ? `id<=${ci}` : `id:c`;
-      options = await search(`is:commander game:paper ${idClause} -name:"${commander.name}"`, 36);
-      break;
-    }
+  // Special: partner-with resolves to exactly one named card.
+  if (info.kind === "partner-with") {
+    if (!info.with) return [];
+    if (nameQuery && !info.with.toLowerCase().includes(nameQuery.toLowerCase())) return [];
+    try {
+      const card = await scry<ScryfallCard>(`/cards/named?exact=${encodeURIComponent(info.with)}`);
+      return [card];
+    } catch { return []; }
   }
-  return { info, options };
+
+  const base = partnerBaseFilter(commander, info);
+  if (!base) return [];
+  const namePart = nameQuery ? ` name:${JSON.stringify(nameQuery)}` : "";
+  const limit = info.kind === "suggested" ? 36 : 60;
+  return search(base + namePart, limit);
 }
+
 
 // Free-text card search, optionally scoped to a format and color identity.
 export async function searchCards(opts: {
