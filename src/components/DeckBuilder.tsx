@@ -193,6 +193,25 @@ export default function DeckBuilder() {
     setPartnerOptions([]);
   }
 
+  async function searchPartner(query: string) {
+    if (!pendingCommander || !partnerInfo) return;
+    setPartnerLoading(true);
+    setError(null);
+    try {
+      if (query.trim().length === 0) {
+        const res = await findPartnerCandidates(pendingCommander);
+        setPartnerOptions(res.options);
+      } else {
+        const opts = await searchPartnerCandidates(pendingCommander, partnerInfo, query);
+        setPartnerOptions(opts);
+      }
+    } catch {
+      setError("Couldn't search partners.");
+    } finally {
+      setPartnerLoading(false);
+    }
+  }
+
   async function generateDeck(commander?: ScryfallCard, partner?: ScryfallCard | null) {
     setLoading(true); setError(null);
     try {
