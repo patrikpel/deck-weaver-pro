@@ -498,6 +498,7 @@ export default function DeckBuilder() {
           onSkip={() => generateDeck(pendingCommander, null)}
           onPick={(p) => generateDeck(pendingCommander!, p)}
           onCancel={cancelPartner}
+          onSearch={searchPartner}
         />
       )}
 
