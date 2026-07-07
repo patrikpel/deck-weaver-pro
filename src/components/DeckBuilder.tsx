@@ -1139,6 +1139,7 @@ function partnerStepTitle(info: PartnerInfo): string {
   switch (info.kind) {
     case "partner": return "Choose a Partner";
     case "partner-with": return `Pair with ${info.with ?? "Partner"}`;
+    case "partner-restricted": return `Choose a Partner — ${info.with ?? ""}`.trim();
     case "friends-forever": return "Choose a Friends Forever partner";
     case "choose-background": return "Choose a Background";
     case "background": return "Choose a commander (Choose a Background)";
@@ -1152,6 +1153,7 @@ function partnerStepHint(info: PartnerInfo): string {
   switch (info.kind) {
     case "partner": return "Pick any other legendary creature with Partner — their color identities combine.";
     case "partner-with": return "This commander has a specific partner.";
+    case "partner-restricted": return `This commander has restricted Partner — it can only pair with other cards that share "Partner — ${info.with ?? ""}".`;
     case "friends-forever": return "Pick any other legendary creature with Friends forever.";
     case "choose-background": return "Pick a Background enchantment to ride along with this commander.";
     case "background": return "Pick a legendary creature with 'Choose a Background'.";
@@ -1160,6 +1162,7 @@ function partnerStepHint(info: PartnerInfo): string {
     case "suggested": return "This commander has no Partner mechanic, but you can still pick a popular co-commander in the same colors. Skip to play solo.";
   }
 }
+
 
 
 function PartnerPicker({
